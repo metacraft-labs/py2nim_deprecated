@@ -21,8 +21,8 @@ iterator b*(values: seq[int]): int =
   for z in reversed(values):
     yield z
 
-var a = makeA(@ [2, 4])
+var a = makeA(@[2, 4])
 for z in a:
   echo z
-for z in b(@ [2, 4]):
+for z in b(@[2, 4]):
   echo z

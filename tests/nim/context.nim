@@ -12,10 +12,10 @@ proc enter*(self: var A): void =
 
 proc exit*(self: var A; exc_type: ref Exception; exc_value: ref Exception;
           traceback: string): void =
-  if not exc_value.isNil() and exc_value of VMError:
+  if notexc_value.isNil() and exc_value of VMError:
     echo "ERROR"
   else:
-    self.a = - 2
+    self.a = -2
   
 var a = A(a: 0)
 try:

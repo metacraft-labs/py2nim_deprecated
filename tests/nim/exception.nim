@@ -1,6 +1,6 @@
 type
   MyError* = object of Exception
-var a = @ [2]
+var a = @[2]
 try:
   echo a[1]
 except IndexError:

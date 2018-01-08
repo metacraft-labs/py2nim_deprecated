@@ -549,8 +549,8 @@ proc generate*(generator: var Generator, module: Module): string =
     if i.kind != PyNone:
       generator.res.add(generator.generateNode(i))
 
-  result = generator.res.renderTree()
+  result = generator.res.renderTree() & "\n"
   if result.startsWith("  "):
-    # XXX: sometimes, the rendered code is indented, try to fix this here
-    result = result.splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n") & "\n"
+  #   # XXX: sometimes, the rendered code is indented, try to fix this here
+    result = result.splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n")
 

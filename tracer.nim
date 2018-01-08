@@ -34,6 +34,11 @@ proc importType*(typ: JsonNode): PyType =
     result.typ = importType(typ{"type"})
   of PyTypeObject:
     result.fields = @[]
+    if typ{"base"} == nil:
+      result.base = nil
+    else:
+      result.base = importType(typ{"base"})
+    result.inherited = ($typ{"inherited"}) == "true"
     for field in typ{"fields"}:
       var variable = PyVariable(name: ($field{"name"})[1..^2])
       variable.typ = importType(field{"type"})

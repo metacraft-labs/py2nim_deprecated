@@ -8,6 +8,8 @@ type
     case kind*: PyTypeKind
     of PyTypeObject:
       fields*: seq[PyVariable]
+      base*: PyType
+      inherited*: bool
     of PyTypeTuple:
       elements*: seq[PyType]
     of PyTypeFunction:

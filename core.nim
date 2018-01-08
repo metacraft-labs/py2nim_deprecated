@@ -137,7 +137,8 @@ proc toType*(typ: PyType): Type =
       if not noRec(typ.label, t):
         isRef = true
         break
-    result = Type(kind: N.Record, label: typ.label, isRef: isRef, members: members)
+    let base = if typ.base.isNil: nil else: toType(typ.base)
+    result = Type(kind: N.Record, label: typ.label, inherited: typ.inherited, base: base, isRef: isRef, members: members)
   of PyTypeTuple:
     result = Type(kind: N.Tuple, elements: typ.elements.mapIt(toType(it)))
   of PyTypeFunction:

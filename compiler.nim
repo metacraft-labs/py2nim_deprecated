@@ -60,6 +60,7 @@ proc collapse(node: Node): seq[Node] =
 
 proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   var moduleEnv = compiler.envs[file]
+  compiler.currentClass = nil
   var childNodes: seq[Node] = @[]
   for child in node.mitems:
     childNodes.add(compiler.compileNode(child, moduleEnv))
@@ -428,6 +429,8 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     result = compiler.translateInit(node, env, assignments=assignments)
   else:
     result = node
+  if not compiler.currentClass.isNil and not compiler.currentClass.base.isNil or compiler.currentClass.inherited:
+    result.isMethod = true
 
 proc compileAttribute*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node

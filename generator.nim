@@ -76,8 +76,10 @@ proc generateClass(generator: var Generator, t: Node): PNode =
   var base: PNode
   if not t.typ.base.isNil:
     base = nkOfInherit.newTree(generator.generateType(t.typ.base))
+  elif t.typ.inherited:
+    base = nkOfInherit.newTree(generateIdent("RootObj"))
   else:
-    base = nkOfInherit.newTree(generateIdent("RootObj")) # we can't be sure its not inherited
+    base = emptyNode
   var objectNode = nkObjectTy.newTree(
       emptyNode, base, recList)
 
@@ -131,7 +133,10 @@ proc generateForward(generator: var Generator, function: Node): PNode =
 
   var name = if function[0].kind == PyStr: generateIdent(function[0].s) else: emitNode(function[0])
   if not function.isIterator:
-    result = nkProcDef.newTree()
+    if function.isMethod:
+      result = nkMethodDef.newTree()
+    else:
+      result = nkProcDef.newTree()
   else:
     result = nkIteratorDef.newTree()
   result.add(nkPostfix.newTree(

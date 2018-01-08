@@ -46,6 +46,7 @@ type
       aliases*: seq[Node]
     of PyFunctionDef:
       isIterator*: bool
+      isMethod*: bool
       calls*: HashSet[string]
     else:
       discard

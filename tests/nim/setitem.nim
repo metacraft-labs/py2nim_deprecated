@@ -1,7 +1,7 @@
 
 type
   A* = object of RootObj
-proc `[]=`*(self: A; e: int; f: int): void =
+method `[]=`*(self: A; e: int; f: int): void =
   echo e + f
 
 var a = A()

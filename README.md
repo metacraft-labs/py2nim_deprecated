@@ -75,6 +75,9 @@ mappings or libraries that will be translated separately.
 We have tested mostly with versions of Python3, but py2nim seems to work fine with
 Python2.7 too.
 
+Also, we still crash on some files, which shouldn't happen. Ideally py2nim should be very fault tolerant and
+produce the best code it can ignoring the parts it can't analyze
+
 ## Implementation
 
 py2nim infers the types of all Python functions with [our python-deduckt library](https://github.com/metacraft-labs/python-deduckt)

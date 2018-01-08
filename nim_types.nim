@@ -32,9 +32,10 @@ type
       genericArgs*: seq[string]
     of N.Record:
       # The fields of an object type
-      base*:    Type
-      init*:    string # if empty, :
-      members*: Table[string, Type]
+      base*:      Type
+      inherited*: bool
+      init*:      string # if empty, :
+      members*:   Table[string, Type]
     of N.Tuple:
       # A tuple
       elements*: seq[Type]

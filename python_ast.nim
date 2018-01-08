@@ -1,4 +1,4 @@
-import strutils, sequtils, tables, future
+import strutils, sequtils, tables, sets, future
 import nim_types
 
 type
@@ -46,6 +46,7 @@ type
       aliases*: seq[Node]
     of PyFunctionDef:
       isIterator*: bool
+      calls*: HashSet[string]
     else:
       discard
     children*: seq[Node] # complicates everything to have it disabled for several nodes

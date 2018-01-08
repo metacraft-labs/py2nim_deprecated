@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, tables,
+  strformat, strutils, sequtils, tables, sets,
   module, python_ast, helpers, core,
   compiler/ast, compiler/idents, compiler/msgs, compiler/renderer, nim_types, terminal
 
@@ -522,10 +522,19 @@ proc generate*(generator: var Generator, module: Module): string =
   for t in module.types:
     generator.res.add(generator.generateClass(t))
 
-  for function in module.functions:
+  var forward: seq[Node] = @[]
+
+  for z, function in module.functions:
     # TODO: smart
     if not function.isIterator:
-      generator.res.add(generator.generateForward(function))
+      for index, previous in module.functions:
+        if index >= z:
+          break
+        if previous.calls.contains(function.typ.label):
+          forward.add(function)
+
+  for function in forward:
+    generator.res.add(generator.generateForward(function))
 
   for function in module.functions:
     generator.res.add(generator.generateFunction(function))

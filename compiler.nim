@@ -1,6 +1,6 @@
 import
   strformat, os, strutils, sequtils, tables, json,
-  python_ast, python_types, nim_types, core, env, tracer,
+  python_ast, python_types, nim_types, core, env, tracer, sets,
   ast_parser, ast_dsl, generator, module, deduckt_db, helpers,
   idioms/[idioms_dsl, operators, string_methods, list_methods]
 
@@ -21,6 +21,7 @@ type
     currentModule*: string
     currentClass*: Type
     currentFunction*: string
+    currentCalls*: HashSet[string]
     base*: string
 
 proc newCompiler*(db: DeducktDb, command: string): Compiler =
@@ -223,6 +224,8 @@ proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
       else:
         # echo fmt"wtf {function.typ}"
         result.typ = function.typ
+  if compiler.currentCalls.isValid() and function.kind == PyLabel:
+    compiler.currentCalls.incl(function.label)
 
 proc compileLabel*(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node.kind == PyLabel
@@ -326,6 +329,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   assert f.kind == PyStr # TODO: label
   var label = f.s
 
+  node.calls = initSet[string]()
   let typ = if fTyp.isNil: env.get(label) else: fTyp
   if typ.isNil or typ.kind notin {N.Overloads, N.Function}:
     return Node(kind: Sequence, children: @[])
@@ -406,6 +410,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
 
   var functionEnv = childEnv(env, label, args, typ.returnType)
   compiler.currentFunction = typ.fullLabel
+  compiler.currentCalls = initSet[string]()
 
   var sequence = node[2]
   assert sequence.kind == Sequence
@@ -416,7 +421,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     z += 1
 
   compiler.currentFunction = ""
-
+  node.calls = compiler.currentCalls
   if functionEnv.hasYield:
     node.isIterator = true
   if isInit:

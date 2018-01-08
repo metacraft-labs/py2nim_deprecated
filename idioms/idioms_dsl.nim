@@ -448,7 +448,7 @@ proc applyOperatorIdiom*(node: var Node, maybe: bool = false): (Node, seq[string
   result[1] = result[1].concat(imports)
 
 
-proc replaceGeneric(typ: Type, genericMap: Table[string, Type]): Type =
+proc replaceGeneric*(typ: Type, genericMap: Table[string, Type]): Type =
   if typ.isNil:
     return typ
   case typ.kind:
@@ -487,7 +487,7 @@ proc replaceGeneric(typ: Type, genericMap: Table[string, Type]): Type =
   of N.Any:
     return typ
 
-proc replaceGeneric(node: var Node, genericMap: Table[string, Type]): Node =
+proc replaceGeneric*(node: var Node, genericMap: Table[string, Type]): Node =
   node.typ = node.typ.replaceGeneric(genericMap)
   var z = 0
   for child in node.mitems:

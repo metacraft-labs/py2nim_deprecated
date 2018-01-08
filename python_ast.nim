@@ -48,6 +48,7 @@ type
       isIterator*: bool
       isMethod*: bool
       calls*: HashSet[string]
+      isGeneric*: bool
     else:
       discard
     children*: seq[Node] # complicates everything to have it disabled for several nodes
@@ -181,6 +182,7 @@ proc deepCopy*(a: Node): Node =
     result.isIterator = a.isIterator
     result.isMethod = a.isMethod
     result.calls = a.calls
+    result.isGeneric = a.isGeneric
   else:
     discard
   result.children = @[]

@@ -58,6 +58,29 @@ proc collapse(node: Node): seq[Node] =
   else:
     result = @[node]
 
+proc genericCompatible(a: Type, b: Type): (bool, Table[string, Type]) =
+  var genericMap = initTable[string, Type]()
+  if a.isNil or b.isNil:
+    return (false, genericMap)
+  # TODO: deep
+  if a.kind != N.Function or b.kind != N.Function:
+    return (false, genericMap)
+  if len(a.functionArgs) == 0 or len(a.functionArgs) != len(b.functionArgs):
+    return (false, genericMap)
+  genericMap["T"] = a.functionArgs[0]
+  for z in 0..<len(a.functionArgs):
+    if not a.functionArgs[z].unify(b.functionArgs[z], genericMap):
+      return (false, genericMap)
+  return (true, genericMap)
+
+proc genericCompatible(a: Node, b: Node): (bool, Table[string, Type]) =
+  var genericMap = initTable[string, Type]()
+  if a.kind != PyFunctionDef or b.kind != PyFunctionDef:
+    return (false, genericMap)
+  result = a.typ.genericCompatible(b.typ)
+  if result[0]:
+    return (a[2].testEq(b[2]), genericMap)
+
 proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   var moduleEnv = compiler.envs[file]
   compiler.currentClass = nil
@@ -68,6 +91,7 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   for child in childNodes.mitems:
     collapsedNodes = collapsedNodes.concat(collapse(child))
   result = compiler.modules[file]
+  var functions: seq[Node] = @[]
   for child in collapsedNodes:
     case child.kind:
     of PyImport:
@@ -75,9 +99,31 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
     of PyClassDef:
       result.types.add(child)
     of PyFunctionDef:
-      result.functions.add(child)
+      functions.add(child)
     else:
       result.init.add(child)
+
+  var maybeGeneric = initTable[string, (Node, bool, Table[string, Type])]()
+  for function in functions:
+    if not maybeGeneric.hasKey(function[0].s):
+      maybeGeneric[function[0].s] = (function, false, initTable[string, Type]())
+    else:
+      var (equivalent, genericMap) = genericCompatible(maybeGeneric[function[0].s][0], function)
+      if equivalent:
+        echo function
+        maybeGeneric[function[0].s][0].isGeneric = true
+        maybeGeneric[function[0].s] = (function, true, genericMap)
+        function.isGeneric = true
+
+  for label, f2 in maybeGeneric:
+    var (function, isGeneric, genericMap) = f2
+    if isGeneric:
+      var f = function
+      result.functions.add(replaceGeneric(f, genericMap))
+
+  for function in functions:
+    if not function.isGeneric:
+      result.functions.add(function)
 
 proc compileImport(compiler: var Compiler, node: var Node, env: var Env): Node =
   # store imports
@@ -431,6 +477,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
 
   compiler.currentFunction = ""
   node.calls = compiler.currentCalls
+  typ.returnType = functionEnv.returnType
   if functionEnv.hasYield:
     node.isIterator = true
   if isInit:
@@ -508,7 +555,11 @@ proc compileList*(compiler: var Compiler, node: var Node, env: var Env): Node =
 proc compileReturn(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[0] = compiler.compileNode(node[0], env)
   if node[0].typ != env.returnType:
-    warn(fmt"{compiler.currentFunction} expected {$env.returnType} got {$node[0].typ} return")
+    # TODO
+    if env.returnType == T.Void:
+      env.returnType = node[0].typ
+    else:
+      warn(fmt"{compiler.currentFunction} expected {$env.returnType} got {$node[0].typ} return")
   result = node
 
 proc compileIf(compiler: var Compiler, node: var Node, env: var Env): Node =

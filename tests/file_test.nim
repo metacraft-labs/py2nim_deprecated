@@ -9,10 +9,9 @@ macro fileTest(input: static[string], output: static[string]): untyped =
   result.add(testCase)
 
   var pythonPaths: seq[string] = @[]
-  #echo getCurrentDir()
   let testsDir = "tests/"
-  # TODO: compile time getCurrentDir
-  let currentDir = "/home/alehander42/python2nim/"
+  echo currentSourcePath
+  let currentDir = currentSourcePath.rsplit("/", 2)[0] & "/"
   for _, pythonPath in walkDir(fmt"{testsDir}{input}", true):
     pythonPaths.add(pythonPath)
   echo pythonPaths

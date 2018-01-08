@@ -167,6 +167,8 @@ proc unify*(a: Type, b: Type, genericMap: var Table[string, Type]): bool =
     return a.overloads.anyIt(it.unify(b, genericMap))
   elif a.kind == N.Function and b.kind == N.Overloads:
     return b.overloads.anyIt(a.unify(it, genericMap))
+  elif a.kind == N.Generic and b.kind == N.Compound:
+    return a == b.original and zip(a.genericArgs, b.args).allIt(Type(kind: N.GenericVar, label: it[0]).unify(it[1], genericMap))
   elif a.kind != b.kind:
     return false
   else:

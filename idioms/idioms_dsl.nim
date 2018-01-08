@@ -95,7 +95,9 @@ proc markIdiomatic*(node: var Node) =
   for child in node.mitems:
     child.markIdiomatic()
 
-proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): Node =
+proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): (Node, seq[string]) =
+  var imports: seq[string] = @[]
+  # echo requiredDependencies
   var newNode = case idiom.kind:
     of IType:
       node.typ = idiom.typ
@@ -107,7 +109,7 @@ proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): Node 
     of IAST:
       idiom.handler(if len(children) > 0: children else: node.children)
   # newNode.markIdiomatic()
-  result = newNode
+  result = (newNode, imports)
 
 proc initName(node: NimNode): (string, seq[Type]) =
   if node.kind == nnkIdent:
@@ -403,11 +405,12 @@ proc readOp*(node: Node): string =
     of PyBitOr: "|"
     else: "?"
 
-proc applyOperatorIdiom*(node: var Node, maybe: bool = false): Node =
+proc applyOperatorIdiom*(node: var Node, maybe: bool = false): (Node, seq[string]) =
   var idiom: Idiom
   let op = readOp(node.children[1])
   let left = node.children[0]
   let right = node.children[2]
+  var imports: seq[string] = @[]
 
   if operatorTypes.hasKey(op):
     let operatorIdioms = operatorTypes[op]
@@ -417,14 +420,33 @@ proc applyOperatorIdiom*(node: var Node, maybe: bool = false): Node =
         idiom = operatorIdiom.idiom
         break
 
+    if idiom.isNil and left.typ == right.typ and left.typ.kind == N.Compound:
+      for operatorIdiom in operatorIdioms:
+        var genericMap = initTable[string, Type]()
+        if left.typ.original.label == "seq":
+          genericMap["T"] = left.typ.args[0]
+          if len(imports) == 0:
+            imports.add("sequtils")
+        elif left.typ.original.label == "Table":
+          genericMap["K"] = left.typ.args[0]
+          genericMap["V"] = left.typ.args[1]
+          if len(imports) == 0:
+            imports.add("tables")
+        if operatorIdiom.left.unify(left.typ, genericMap) and operatorIdiom.right.unify(right.typ, genericMap):
+          idiom = operatorIdiom.idiom
+          break
+
   if idiom.isNil:
+    imports = @[]
     if not maybe:
       raise newException(IdiomError, fmt"idiom for {op}({left.typ}, {right.typ})")
     else:
-      result = nil
+      result = (nil, imports)
       return
 
   result = applyIdiom(node, idiom)
+  result[1] = result[1].concat(imports)
+
 
 proc replaceGeneric(typ: Type, genericMap: Table[string, Type]): Type =
   if typ.isNil:
@@ -509,18 +531,18 @@ proc loadMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[No
           break
   result = (idiom, genericMap)
 
-proc applyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): Node =
+proc applyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): (Node, seq[string]) =
   var (idiom, genericMap) = loadMethodIdiom(node, receiver, name, args)
   if idiom.isNil:
     raise newException(IdiomError, fmt"idiom for {$receiver.typ}.{name}({$len(args)})")
 
-  var n = applyIdiom(node, idiom, @[receiver].concat(args))
-  result = n.replaceGeneric(genericMap)
+  var (n, imports) = applyIdiom(node, idiom, @[receiver].concat(args))
+  result = (n.replaceGeneric(genericMap), imports)
 
-proc maybeApplyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): Node =
+proc maybeApplyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): (Node, seq[string]) =
   var (idiom, genericMap) = loadMethodIdiom(node, receiver, name, args)
   if idiom.isNil:
-    result = nil
+    result = (nil, @[])
   else:
-    var n = applyIdiom(node, idiom, @[receiver].concat(args))
-    result = n.replaceGeneric(genericMap)
+    var (n, imports) = applyIdiom(node, idiom, @[receiver].concat(args))
+    result = (n.replaceGeneric(genericMap), imports)

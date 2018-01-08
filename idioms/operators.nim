@@ -44,4 +44,7 @@ operators:
   `+`(T.String, T.String):
     binop(left, operator("&"), right, typ=T.String)
 
+  `+`(T.List, T.List):
+    call(attribute(left, "concat"), @[right], typ=left.typ)
+
 # echo operatorTypes

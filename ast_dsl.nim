@@ -44,12 +44,14 @@ macro attribute*(label: static[string]): untyped =
         Node(kind: PyLabel, label: `base`),
         Node(kind: PyStr, s: `field`)])
 
-macro attribute*(base: untyped, attr: untyped): untyped =
+macro attribute*(base: untyped, attr: untyped, typ: untyped = nil): untyped =
   var baseL = base
   baseL = baseL.expandLiteral()
+  let t = if typ.isNil: newNilLit() else: typ
   result = quote:
     Node(
       kind: PyAttribute,
+      typ: `t`,
       children: @[
         `baseL`,
         Node(kind: PyStr, s: `attr`)])

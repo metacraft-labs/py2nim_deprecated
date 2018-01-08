@@ -187,16 +187,19 @@ proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
     warn("failed to determine type of function:\n" & $node)
     function.typ = NIM_ANY
 
+  var imports: seq[string] = @[]
   if function.kind == PyAttribute:
     assert function[1].kind == PyStr
-    result = maybeApplyMethodIdiom(node, function[0], function[1].s, args.children)
+    (result, imports) = maybeApplyMethodIdiom(node, function[0], function[1].s, args.children)
   elif function.kind == PyLabel:
     if function.label in SPECIAL_FUNCTIONS:
       result = SPECIAL_FUNCTIONS[function.label](compiler, function.label, args.children, env)
     else:
-      result = maybeApplyMethodIdiom(node, nil, function.label, args.children)
+      (result, imports) = maybeApplyMethodIdiom(node, nil, function.label, args.children)
   else:
     result = node
+  for imp in imports:
+    compiler.registerImport(imp)
   if result.isNil: # no idiom
     result = node
     if function.typ.kind == N.Function:
@@ -265,9 +268,9 @@ proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
   var right = compiler.compileNode(node[2], env)
   let op = node[1]
   if left.typ == T.Float and right.typ == T.Int:
-    right = call(attribute(right, "float"), @[], T.Float)
+    right = attribute(right, "float", T.Float)
   elif left.typ == T.Int and right.typ == T.Float:
-    left = call(attribute(left, "float"), @[], T.Float)
+    left = attribute(left, "float", T.Float)
   elif left.typ.isNil or left.typ.kind == N.Any:
     left.typ = right.typ
   elif right.typ.isNil or right.typ.kind == N.Any:
@@ -275,12 +278,15 @@ proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[0] = left
   node[2] = right
   result = node
+  var imports: seq[string] = @[]
   if left.typ == T.Int or left.typ == T.Float:
     result.typ = left.typ
     # TODO:
-    result = applyOperatorIdiom(result)
+    (result, imports) = applyOperatorIdiom(result)
   else:
-    result = applyOperatorIdiom(result)
+    (result, imports) = applyOperatorIdiom(result)
+  for imp in imports:
+    compiler.registerImport(imp)
 
 proc pureConstr(compiler: var Compiler, node: var Node): bool =
   let args = node[1][0].mapIt(it[0].s)
@@ -336,9 +342,11 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     return Node(kind: Sequence, children: @[])
   elif typ.kind == N.Overloads:
     result = Node(kind: Sequence, children: @[])
+    let originalNode = node
     for overload in typ.overloads:
-      # echo fmt"compile {overload}"
-      result.children.add(compiler.compileFunctionDef(node, env, fTyp=overload))
+      echo fmt"compile {overload}"
+      var tempNode = deepCopy(originalNode)
+      result.children.add(compiler.compileFunctionDef(tempNode, env, fTyp=overload))
     return
   var isInit = false
   if label == "__init__":
@@ -428,7 +436,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   if isInit:
     result = compiler.translateInit(node, env, assignments=assignments)
   else:
-    result = node
+    result = typed(node, typ)
   if not compiler.currentClass.isNil and (not compiler.currentClass.base.isNil or compiler.currentClass.inherited):
     result.isMethod = true
 
@@ -1164,6 +1172,7 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   except Exception:
     warn(fmt"compile {getCurrentExceptionMsg()}")
     result = PY_NIL
+    # raise getCurrentException()
 
 proc compileAst*(compiler: var Compiler, file: string) =
   var node = compiler.asts[file]
@@ -1278,6 +1287,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
           compiler.compileAst(path)
       except Exception:
         echo getCurrentExceptionMsg()
+        # raise getCurrentException()
   if untilPass == Pass.Generation:
     var generator = Generator(indent: 2, v: generator.NimVersion.Development)
     for path, module in compiler.modules:

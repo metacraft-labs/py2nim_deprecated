@@ -536,7 +536,8 @@ proc generate*(generator: var Generator, module: Module): string =
       for index, previous in module.functions:
         if index >= z:
           break
-        if previous.calls.contains(function.typ.label):
+        echo previous.calls.isValid()
+        if previous.calls.isValid() and previous.calls.contains(function.typ.label):
           forward.add(function)
 
   for function in forward:

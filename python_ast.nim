@@ -1,5 +1,5 @@
 import strutils, sequtils, tables, sets, future
-import nim_types
+import nim_types, gen_kind
 
 type
   NodeKind* = enum
@@ -155,3 +155,35 @@ proc testEq*(a: Node, b: Node): bool =
           result = zip(a.children, b.children).allIt(it[0].testEq(it[1]))
         else:
           result = (a.children.isNil or len(a.children) == 0) and (b.children.isNil or len(b.children) == 0)
+
+proc deepCopy*(a: Node): Node =
+  if a.isNil:
+    return nil
+  result = genKind(Node, a.kind)
+  case a.kind:
+  of PyStr, PyBytes:
+    result.s = a.s
+  of PyInt:
+    result.i = a.i
+  of PyFloat:
+    result.f = a.f
+  of PyLabel:
+    result.label = a.label
+  of PyHugeInt:
+    result.h = a.h
+  of PyChar:
+    result.c = a.c
+  of PyAssign:
+    result.declaration = a.declaration
+  of PyImport:
+    result.aliases = a.aliases.mapIt(deepCopy(it))
+  of PyFunctionDef:
+    result.isIterator = a.isIterator
+    result.isMethod = a.isMethod
+    result.calls = a.calls
+  else:
+    discard
+  result.children = @[]
+  for child in a.children:
+    result.children.add(deepCopy(child))
+

@@ -2,7 +2,7 @@ import os, strformat, strutils, sequtils, tables, json, macros, parseopt2
 import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
-  echo "py2nim <command> [-o --output <outputdir>] [-a --ast] [-h --help]"
+  echo "py2nim [-o --output <outputdir>] [-a --ast] [-h --help] <test.py> args"
   quit(0)
 
 proc save(compiler: Compiler, output: string, untilPass: Pass) =
@@ -21,10 +21,21 @@ proc translate =
   var command = ""
   var untilPass = Pass.Generation
   var output = "output"
-  for kind, key, arg in getopt():
+  var nimArgs: seq[string] = @[]
+  var pythonArgs: seq[string] = @[]
+  var inPython = false
+  for z in 1..paramCount():
+    var arg = paramStr(z)
+    if not inPython and not arg.endsWith(".py"):
+      nimArgs.add(arg)
+    else:
+      inPython = true
+      pythonArgs.add(arg)
+  command = pythonArgs.join(" ")
+
+  var parser = initOptParser(nimArgs.join(" "))
+  for kind, key, arg in parser.getopt():
     case kind:
-    of cmdArgument:
-      command = key
     of cmdLongOption, cmdShortOption:
       case key:
       of "output", "o": output = arg
@@ -32,7 +43,7 @@ proc translate =
       of "help", "h": writeHelp()
     else:
       discard
-  
+
   if command == "":
     writeHelp()
 

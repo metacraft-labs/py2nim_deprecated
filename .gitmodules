@@ -1,0 +1,3 @@
+[submodule "python-deduckt"]
+	path = python-deduckt
+	url = git@github.com:metacraft-labs/python-deduckt

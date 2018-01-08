@@ -31,8 +31,8 @@ proc translate =
     else:
       inPython = true
       pythonArgs.add(arg)
+  pythonArgs[0] = expandFilename(pythonArgs[0])
   command = pythonArgs.join(" ")
-
   var parser = initOptParser(nimArgs.join(" "))
   for kind, key, arg in parser.getopt():
     case kind:

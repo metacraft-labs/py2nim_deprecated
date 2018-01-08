@@ -1,3 +1,3 @@
 type
-  A* = object of RootObj
+  A* = object
 var a = A()

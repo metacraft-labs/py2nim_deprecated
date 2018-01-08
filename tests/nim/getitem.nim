@@ -1,6 +1,6 @@
 type
-  A* = object of RootObj
-method `[]`*(self: A; e: int): int =
+  A* = object
+proc `[]`*(self: A; e: int): int =
   return e
 
 var a = A()

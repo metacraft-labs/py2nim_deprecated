@@ -429,7 +429,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     result = compiler.translateInit(node, env, assignments=assignments)
   else:
     result = node
-  if not compiler.currentClass.isNil and not compiler.currentClass.base.isNil or compiler.currentClass.inherited:
+  if not compiler.currentClass.isNil and (not compiler.currentClass.base.isNil or compiler.currentClass.inherited):
     result.isMethod = true
 
 proc compileAttribute*(compiler: var Compiler, node: var Node, env: var Env): Node =

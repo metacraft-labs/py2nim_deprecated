@@ -1,7 +1,8 @@
 import
   strformat, strutils, sequtils, tables, sets,
   module, python_ast, helpers, core,
-  compiler/ast, compiler/idents, compiler/msgs, compiler/renderer, nim_types, terminal
+  compiler/[ast, astalgo, idents, msgs, renderer],
+  nim_types, terminal
 
 
 type
@@ -335,7 +336,7 @@ proc generateConstr(generator: var Generator, node: Node): PNode =
     result = nkCall.newTree(
       generateIdent(node[0].typ.init))
     for child in node[2]:
-      result.add(emitNode(child))  
+      result.add(emitNode(child))
 
 proc generateNameConstant(generator: var Generator, node: Node): PNode =
   let label = node[0].label
@@ -548,6 +549,8 @@ proc generate*(generator: var Generator, module: Module): string =
     if i.kind != PyNone:
       generator.res.add(generator.generateNode(i))
 
-  result = generator.res.renderTree().splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n") & "\n"
-  # why? I dont know why renderer indents
+  result = generator.res.renderTree()
+  if result.startsWith("  "):
+    # XXX: sometimes, the rendered code is indented, try to fix this here
+    result = result.splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n") & "\n"
 

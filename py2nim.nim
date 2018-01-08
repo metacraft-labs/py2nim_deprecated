@@ -49,7 +49,7 @@ proc translate =
 
 
   # trace it and collect types
-  tracePython(command) 
+  tracePython(command)
   var db = deduckt_db.load("python-deduckt.json")
 
   # load ast

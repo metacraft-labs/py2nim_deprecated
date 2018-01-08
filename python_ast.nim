@@ -105,13 +105,14 @@ iterator items*(node: PythonNode): PythonNode =
       yield child
 
 iterator mitems*(node: PythonNode): var PythonNode =
-  case node.kind:
-  of PyStr, PyBytes, PyInt, PyFloat, PyLabel, PyChar, PyHugeInt:
-    discard
-  else:
-    for child in node.children.mitems:
-      yield child
+  for child in node.children.mitems:
+    yield child
 
+iterator nitems*(node: PythonNode): (int, var PythonNode) =
+  var z = 0
+  for child in node.children.mitems:
+    yield (z, child)
+    z += 1
 
 proc `$`*(node: PythonNode): string =
   result = dump(node, 0)

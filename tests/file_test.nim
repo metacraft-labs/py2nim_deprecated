@@ -12,7 +12,7 @@ macro fileTest(input: static[string], output: static[string]): untyped =
   #echo getCurrentDir()
   let testsDir = "tests/"
   # TODO: compile time getCurrentDir
-  let currentDir = "/home/alehander42/py2nim/"
+  let currentDir = "/home/alehander42/python2nim/"
   for _, pythonPath in walkDir(fmt"{testsDir}{input}", true):
     pythonPaths.add(pythonPath)
   echo pythonPaths

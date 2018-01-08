@@ -38,6 +38,8 @@ proc importType*(typ: JsonNode): PyType =
       var variable = PyVariable(name: ($field{"name"})[1..^2])
       variable.typ = importType(field{"type"})
       result.fields.add(variable)
+  of PyTypeTuple:
+    result.elements = typ{"elements"}.mapIt(importType(it))    
   of PyTypeGeneric:
     result.klass = typ{"klass"}.getStr()
     result.length = typ{"length"}.getInt()

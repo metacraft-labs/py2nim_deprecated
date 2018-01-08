@@ -1003,6 +1003,12 @@ proc compileBoolOp(compiler: var Compiler, node: var PythonNode, env: var Env): 
     var right = node[1][z]
     result = binop(result, operator(label), right, typ=T.Bool)
 
+proc compileTuple(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+  for z, child in node.nitems:
+    node[z] = compiler.compileNode(child, env)
+  node.typ = Type(kind: N.Tuple, elements: node.children.mapIt(it.typ))
+  result = node
+
 proc compileNode*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
   # TODO: write a macro
   # echo fmt"compile {node.kind}"
@@ -1087,6 +1093,8 @@ proc compileNode*(compiler: var Compiler, node: var PythonNode, env: var Env): P
       result = compiler.compileBreak(node, env)
     of PyBoolOp:
       result = compiler.compileBoolOp(node, env)
+    of PyTuple:
+      result = compiler.compileTuple(node, env)
     else:
       result = PY_NIL
       warn($node.kind)

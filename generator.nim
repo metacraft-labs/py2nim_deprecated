@@ -103,6 +103,10 @@ proc generateType(generator: var Generator, typ: Type): PNode =
       elif typLabel == "bytes":
         typLabel = "cstring"
       result = generateIdent(typLabel)
+    of N.Tuple:
+      result = nkPar.newTree()
+      for element in typ.elements:
+        result.add(generator.generateType(element))
     of N.Compound:
       result = nkBracketExpr.newTree(generateIdent(typ.original.label))
       for arg in typ.args:
@@ -417,6 +421,11 @@ proc generateWith(generator: var Generator, node: PythonNode): PNode =
 proc generateOf(generator: var Generator, node: PythonNode): PNode =
   result = nkInfix.newTree(generateIdent("of"), emitNode(node[0]), emitNode(node[1]))
 
+proc generateTuple(generator: var Generator, node: PythonNode): PNode =
+  result = nkPar.newTree()
+  for child in node:
+    result.add(emitNode(child))
+
 proc generateNode(generator: var Generator, node: PythonNode): PNode =
   # TODO: macro
   # generator.log "generate"
@@ -492,6 +501,8 @@ proc generateNode(generator: var Generator, node: PythonNode): PNode =
     result = generator.generateWith(node)
   of NimOf:
     result = generator.generateOf(node)
+  of PyTuple:
+    result = generator.generateTuple(node)
   else:
     echo "?", node.kind
     result = emptyNode

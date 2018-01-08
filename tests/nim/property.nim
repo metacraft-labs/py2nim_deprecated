@@ -2,7 +2,6 @@ type
   A* = object of RootObj
     a*: int
 
-proc z*(self: A): int
 proc z*(self: A): int =
   return self.a + 8
 

@@ -1,6 +1,5 @@
 type
   A* = object of RootObj
-proc `[]`*(self: A; e: int): int
 proc `[]`*(self: A; e: int): int =
   return e
 

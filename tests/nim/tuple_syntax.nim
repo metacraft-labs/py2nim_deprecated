@@ -1,4 +1,3 @@
-proc t*(a: (int, string)): void
 proc t*(a: (int, string)): void =
   echo a
 

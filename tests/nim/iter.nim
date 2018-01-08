@@ -6,7 +6,6 @@ type
     values*: seq[int]
     z*: int
 
-proc makeA*(values: seq[int]): A
 proc makeA*(values: seq[int]): A =
   result.values = values
   result.z = len(result.values)

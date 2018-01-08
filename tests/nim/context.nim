@@ -7,9 +7,6 @@ type
   A* = object of RootObj
     a*: int
 
-proc enter*(self: var A): void
-proc exit*(self: var A; exc_type: ref Exception; exc_value: ref Exception;
-          traceback: string): void
 proc enter*(self: var A): void =
   self.a = 2
 

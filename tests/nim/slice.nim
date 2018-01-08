@@ -1,4 +1,3 @@
-proc t*(a: seq[int]): seq[int]
 proc t*(a: seq[int]): seq[int] =
   return a[2 .. ^ 1]
 

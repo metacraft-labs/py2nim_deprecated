@@ -35,9 +35,11 @@ Also, print, isinstance, int, str and len builtin functions (this list should ex
 A Python function can be translated to many Nim overloads of the same function.
 We might try to detect generic Python functions and translate them as such.
 
+
 ## Classes
 
-They are translated to an object type and functions working on it (a better, method-based translation will be generated next)
+They are translated to an object type and functions working on it.
+If a class is inherited, methods are created, otherwise proc.
 
 ## Python constructs
 
@@ -53,4 +55,10 @@ we can translate some classes with `__enter__` and `__exit__` to types which imp
 
 ## Other magic methods
 
-`__init__`, `__str__`, `__len__`, `__getitem__`, `__setitem__`
+`__init__`, `__str__`, `__len__`, `__getitem__`, `__setitem__`, `__call__`
+
+## `@property` and `@classmethod`
+
+There is some support for them
+
+

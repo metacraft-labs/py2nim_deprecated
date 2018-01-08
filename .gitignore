@@ -7,7 +7,6 @@ py2nim
 a
 *json
 
-temp.py
 types.json
 python-deduckt.json
 a.nim

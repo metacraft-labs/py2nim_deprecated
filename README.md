@@ -90,6 +90,12 @@ Finally it produces `PNode`-s and reuses the compiler's `renderer.nim` to genera
 
 You can find an incomplete list in [transformations.md](transformations.md), docs are still in early stage
 
+
+## Contributions
+
+You can always ask questions in the issues. If you want to contribute, or you want to discuss a possible addition or use case,
+please feel welcome to open a new issue
+
 ## License
 
 The MIT License (MIT)

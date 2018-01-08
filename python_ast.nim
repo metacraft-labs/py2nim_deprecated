@@ -2,7 +2,7 @@ import strutils, sequtils, tables, future
 import nim_types
 
 type
-  PythonNodeKind* = enum
+  NodeKind* = enum
     PyAST, PyAdd, PyAnd, PyAnnAssign, PyAssert, PyAssign, PyAsyncFor, PyAsyncFunctionDef, PyAsyncWith, PyAttribute,
     PyAugAssign, PyAugLoad, PyAugStore, PyAwait, PyBinOp, PyBitAnd, PyBitOr, PyBitXor, PyBoolOp, PyBreak, PyBytes,
     PyCall, PyClassDef, PyCompare, PyConstant, PyContinue, PyDel, PyDelete, PyDict,
@@ -16,18 +16,18 @@ type
     PySet, PySetComp, PySlice, PyStarred, PyStore, PyStr, PySub, PySubscript, PySuite,
     PyTry, PyTuple,
     PyUAdd, PyUSub, PyUnaryOp, PyWhile, PyWith, PyYield, PyYieldFrom, Py_NUM_TYPES, Pyalias, Pyarguments, Pyarg, Pykeyword, Pycomprehension, Pywithitem,
-    PyOperator, PyVarDef, PyChar, PyConstr, NimWhen, PyHugeInt, NimRange, NimRangeLess, NimCommentedOut, NimExprColonExpr, NimInfix, NimAccQuoted, NimOf
+    PyOperator, PyVarDef, PyChar, PyConstr, NimWhen, PyHugeInt, NimRange, NimRangeLess, NimCommentedOut, NimExprColonExpr, NimInfix, NimAccQuoted, NimOf, NimPrefix
 
   Declaration* {.pure.} = enum Existing, Let, Var, Const
 
-  PythonNode* = ref object
+  Node* = ref object
     typ*: Type # The nim type of the node
     debug*: string # Eventually python source?
     idiomatic*: bool # Makes sure a node is converted to an idiom max 1
     line*: int # Line, -1 or actual
     column*: int # Column, -1 or actual
     ready*: bool # Ready for gen
-    case kind*: PythonNodeKind:
+    case kind*: NodeKind:
     of PyStr, PyBytes:
       s*: string
     of PyInt:
@@ -43,14 +43,14 @@ type
     of PyAssign:
       declaration*: Declaration
     of PyImport:
-      aliases*: seq[PythonNode]
+      aliases*: seq[Node]
     of PyFunctionDef:
       isIterator*: bool
     else:
       discard
-    children*: seq[PythonNode] # complicates everything to have it disabled for several nodes
+    children*: seq[Node] # complicates everything to have it disabled for several nodes
 
-proc dump*(node: PythonNode, depth: int, typ: bool = false): string =
+proc dump*(node: Node, depth: int, typ: bool = false): string =
   if node.isNil:
     return "nil"
   let offset = repeat("  ", depth)
@@ -79,24 +79,24 @@ proc dump*(node: PythonNode, depth: int, typ: bool = false): string =
         "$1$2:\n$3" % [kind, typDump, node.children.mapIt(dump(it, depth + 1, typ)).join("\n")]
   result = "$1$2" % [offset, left]
 
-proc dumpList*(nodes: seq[PythonNode], depth: int): string =
+proc dumpList*(nodes: seq[Node], depth: int): string =
   result = nodes.mapIt(dump(it, depth, true)).join("\n")
 
-proc `[]`*(node: PythonNode, index: int): var PythonNode =
+proc `[]`*(node: Node, index: int): var Node =
   case node.kind:
   of PyStr, PyBytes, PyInt, PyFloat, PyLabel, PyChar, PyHugeInt:
     raise newException(ValueError, "no index")
   else:
     return node.children[index]
 
-proc `[]=`*(node: var PythonNode, index: int, a: PythonNode) =
+proc `[]=`*(node: var Node, index: int, a: Node) =
   case node.kind:
   of PyStr, PyBytes, PyInt, PyFloat, PyLabel, PyChar, PyHugeInt:
     raise newException(ValueError, "no index")
   else:
     node.children[index] = a
 
-iterator items*(node: PythonNode): PythonNode =
+iterator items*(node: Node): Node =
   case node.kind:
   of PyStr, PyBytes, PyInt, PyFloat, PyLabel, PyChar, PyHugeInt:
     discard
@@ -104,26 +104,26 @@ iterator items*(node: PythonNode): PythonNode =
     for child in node.children:
       yield child
 
-iterator mitems*(node: PythonNode): var PythonNode =
+iterator mitems*(node: Node): var Node =
   for child in node.children.mitems:
     yield child
 
-iterator nitems*(node: PythonNode): (int, var PythonNode) =
+iterator nitems*(node: Node): (int, var Node) =
   var z = 0
   for child in node.children.mitems:
     yield (z, child)
     z += 1
 
-proc `$`*(node: PythonNode): string =
+proc `$`*(node: Node): string =
   result = dump(node, 0)
 
 
-proc notExpr*(node: PythonNode): PythonNode =
+proc notExpr*(node: Node): Node =
   result = node
   while result.kind == PyExpr:
     result = result.children[0]
 
-proc testEq*(a: PythonNode, b: PythonNode): bool =
+proc testEq*(a: Node, b: Node): bool =
   if a.isNil or b.isNil:
     return false
   elif a.kind == PyExpr or b.kind == PyExpr:

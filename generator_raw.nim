@@ -30,11 +30,11 @@ template ensure(k: untyped): untyped =
 
 let endl = "\n"
 
-proc generateNode(generator: var Generator, node: PythonNode): string
+proc generateNode(generator: var Generator, node: Node): string
 
-proc generateAssign(generator: var Generator, node: PythonNode): string
+proc generateAssign(generator: var Generator, node: Node): string
 
-proc generateImport(generator: var Generator, imp: PythonNode) =
+proc generateImport(generator: var Generator, imp: Node) =
   assert imp.kind == PyImport
 
   let labels = imp.children.mapIt(it.label).join(" ")
@@ -43,12 +43,12 @@ proc generateImport(generator: var Generator, imp: PythonNode) =
     emitTop generator.generateAssign(alias)
     emitTop "\n"
 
-proc generateClass(generator: var Generator, t: PythonNode) =
+proc generateClass(generator: var Generator, t: Node) =
   assert t.kind in {PyClassDef}
 
   emitTop fmt"type {t.label} = object{endl}"
 
-proc generateFunction(generator: var Generator, function: PythonNode) =
+proc generateFunction(generator: var Generator, function: Node) =
   assert function.kind in {PyFunctionDef}
 
   emitTop fmt"proc {function[0].s}(){endl}"
@@ -57,7 +57,7 @@ proc generateDeclaration(generator: var Generator, declaration: Declaration): st
   let declarations: array[Declaration, string] = ["", "let ", "var ", "const "]
   result = declarations[declaration]
 
-proc generateAssign(generator: var Generator, node: PythonNode): string =
+proc generateAssign(generator: var Generator, node: Node): string =
   ensure(PyAssign)
   
   let declaration = generator.generateDeclaration(node.declaration)
@@ -67,7 +67,7 @@ proc generateAssign(generator: var Generator, node: PythonNode): string =
   emit " = "
   emitNode node[1]
 
-proc generateNode(generator: var Generator, node: PythonNode): string =
+proc generateNode(generator: var Generator, node: Node): string =
   # TODO: macro
   case node.kind:
   of PyAssign:

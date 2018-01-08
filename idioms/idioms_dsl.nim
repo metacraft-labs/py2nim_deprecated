@@ -13,11 +13,11 @@ type
     of IType:
       typ*:       Type
     of IMethod, IFunction:
-      receiver*:  PythonNode # nil IFunction
+      receiver*:  Node # nil IFunction
       name*:      string
-      args*:      seq[PythonNode]
+      args*:      seq[Node]
     of IAST:
-      handler*:   proc(nodes: seq[PythonNode]): PythonNode
+      handler*:   proc(nodes: seq[Node]): Node
 
   OperatorIdiom* = object
     left*:      Type
@@ -52,7 +52,7 @@ proc generateOperators(types: NimNode): NimNode =
   result = nnkStmtList.newTree()
   let handlerNode = ident("handler")
   var handler = quote:
-    var `handlerNode`: proc(nodes: seq[PythonNode]): PythonNode
+    var `handlerNode`: proc(nodes: seq[Node]): Node
   result.add(handler)
   for t in types:
     if t.kind == nnkInfix and $(t[0]) == "->":
@@ -76,7 +76,7 @@ proc generateOperators(types: NimNode): NimNode =
       let leftNode = ident("left")
       let rightNode = ident("right")
       handler = quote:
-        `handlerNode` = proc(nodes: seq[PythonNode]): PythonNode =
+        `handlerNode` = proc(nodes: seq[Node]): Node =
           let `leftNode` = nodes[0]
           let `rightNode` = nodes[2]
           `ast`
@@ -90,12 +90,12 @@ proc generateOperators(types: NimNode): NimNode =
       result.add(handler)
       result.add(last)
 
-proc markIdiomatic*(node: var PythonNode) =
+proc markIdiomatic*(node: var Node) =
   node.idiomatic = true
   for child in node.mitems:
     child.markIdiomatic()
 
-proc applyIdiom*(node: var PythonNode, idiom: Idiom, children: seq[PythonNode] = @[]): PythonNode =
+proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): Node =
   var newNode = case idiom.kind:
     of IType:
       node.typ = idiom.typ
@@ -207,7 +207,7 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
   var m = quote:
     var `methodIdiomNode` = MethodIdiom()
     var `idiomNode`: Idiom
-    var `handlerNode`: proc (`nodes`: seq[PythonNode]): PythonNode
+    var `handlerNode`: proc (`nodes`: seq[Node]): Node
     `genericNode`
     builtinMethods[`typ`] = initTable[string, seq[MethodIdiom]]()
     requiredDependencies[`typ`] = TypeDependency(methods: initTable[string, seq[string]](), ignore: @[], all: @[])
@@ -225,7 +225,7 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
     var childGenericVars: seq[Type] = @[]
 
     handlerStart = quote:
-      `handlerNode` = proc(`nodes`: seq[PythonNode]): PythonNode =
+      `handlerNode` = proc(`nodes`: seq[Node]): Node =
         let `receiverNode` = `nodes`[0]
     if child.kind == nnkInfix:
       assert child[0].kind == nnkIdent and $child[0] == "=>"
@@ -256,13 +256,13 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
             if arg.kind != nnkDotExpr:
               nimArgs.add(arg)
           handlerCode = quote:
-            PythonNode(
+            Node(
               kind: PyCall,
               children: @[
-                PythonNode(
+                Node(
                   kind: PyAttribute,
-                  children: @[`receiver`, PythonNode(kind: PyStr, s: `nimName`)]),
-                PythonNode(kind: Sequence, children: @[])],
+                  children: @[`receiver`, Node(kind: PyStr, s: `nimName`)]),
+                Node(kind: Sequence, children: @[])],
               typ: `ret`)
         elif child[2][0].kind == nnkIdent:
           receiver = nil
@@ -274,11 +274,11 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
             else:
               nimArgs.add(arg)
           handlerCode = quote:
-            PythonNode(
+            Node(
               kind: PyCall,
               children: @[
-                PythonNode(kind: PyLabel, label: `nimName`),
-                PythonNode(kind: Sequence, children: @[])],
+                Node(kind: PyLabel, label: `nimName`),
+                Node(kind: Sequence, children: @[])],
               typ: `ret`)
         # echo "hh", handlerCode[^2][^1][^1][^1][^1][^1][^1].treerepr
         for arg in nimArgs:
@@ -288,13 +288,13 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
         nimName = newLit($child[2])
         nimArgs = argNames.mapIt(ident($it))
         handlerCode = quote:
-          PythonNode(
+          Node(
             kind: PyCall,
             children: @[
-              PythonNode(
+              Node(
                 kind: PyAttribute,
-                children: @[`receiver`, PythonNode(kind: PyStr, s: `nimName`)]),
-              PythonNode(kind: Sequence, children: @[])],
+                children: @[`receiver`, Node(kind: PyStr, s: `nimName`)]),
+              Node(kind: Sequence, children: @[])],
           typ: `ret`)
         for arg in nimArgs:
           handlerCode[^2][^1][^1][^1][^1][^1][^1].add(arg)
@@ -389,7 +389,7 @@ macro builtin*(typ: untyped, children: untyped): untyped =
 #     # we can reuse existing functions and types
 #     # or we can generate ast/code that does the same thing in Nim
 
-proc readOp*(node: PythonNode): string =
+proc readOp*(node: Node): string =
   result = case node.kind:
     of PyAdd: "+"
     of PySub: "-"
@@ -403,7 +403,7 @@ proc readOp*(node: PythonNode): string =
     of PyBitOr: "|"
     else: "?"
 
-proc applyOperatorIdiom*(node: var PythonNode, maybe: bool = false): PythonNode =
+proc applyOperatorIdiom*(node: var Node, maybe: bool = false): Node =
   var idiom: Idiom
   let op = readOp(node.children[1])
   let left = node.children[0]
@@ -465,7 +465,7 @@ proc replaceGeneric(typ: Type, genericMap: Table[string, Type]): Type =
   of N.Any:
     return typ
 
-proc replaceGeneric(node: var PythonNode, genericMap: Table[string, Type]): PythonNode =
+proc replaceGeneric(node: var Node, genericMap: Table[string, Type]): Node =
   node.typ = node.typ.replaceGeneric(genericMap)
   var z = 0
   for child in node.mitems:
@@ -473,7 +473,7 @@ proc replaceGeneric(node: var PythonNode, genericMap: Table[string, Type]): Pyth
     z += 1
   return node
 
-proc loadMethodIdiom*(node: var PythonNode, receiver: PythonNode, name: string, args: seq[PythonNode]): (Idiom, Table[string, Type]) =
+proc loadMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): (Idiom, Table[string, Type]) =
   var idiom: Idiom
   var genericMap = initTable[string, Type]()
   var typ: Type
@@ -509,7 +509,7 @@ proc loadMethodIdiom*(node: var PythonNode, receiver: PythonNode, name: string, 
           break
   result = (idiom, genericMap)
 
-proc applyMethodIdiom*(node: var PythonNode, receiver: PythonNode, name: string, args: seq[PythonNode]): PythonNode =
+proc applyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): Node =
   var (idiom, genericMap) = loadMethodIdiom(node, receiver, name, args)
   if idiom.isNil:
     raise newException(IdiomError, fmt"idiom for {$receiver.typ}.{name}({$len(args)})")
@@ -517,7 +517,7 @@ proc applyMethodIdiom*(node: var PythonNode, receiver: PythonNode, name: string,
   var n = applyIdiom(node, idiom, @[receiver].concat(args))
   result = n.replaceGeneric(genericMap)
 
-proc maybeApplyMethodIdiom*(node: var PythonNode, receiver: PythonNode, name: string, args: seq[PythonNode]): PythonNode =
+proc maybeApplyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): Node =
   var (idiom, genericMap) = loadMethodIdiom(node, receiver, name, args)
   if idiom.isNil:
     result = nil

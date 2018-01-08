@@ -34,7 +34,7 @@ proc load*(dbfile: string): DeducktDb =
       result.modules.add(label)
 
 
-proc loadAst*(db: DeducktDb, filename: string): PythonNode =
+proc loadAst*(db: DeducktDb, filename: string): Node =
   # XXX: Perhaps, this could be cached
   echo filename
   result = importAst(db.root[filename]["ast"])

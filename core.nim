@@ -52,43 +52,43 @@ proc seqType*(element: Type): Type =
 proc tableType*(key: Type, value: Type): Type =
   result = Type(kind: N.Compound, args: @[key, value], original: T.Dict)
 
-proc pyLabel*(label: string, typ: Type = nil): PythonNode =
-  result = PythonNode(kind: PyLabel, label: label, typ: typ)
+proc pyLabel*(label: string, typ: Type = nil): Node =
+  result = Node(kind: PyLabel, label: label, typ: typ)
 
-proc pyInt*(i: int): PythonNode =
-  result = PythonNode(kind: PyInt, i: i, typ: T.Int)
+proc pyInt*(i: int): Node =
+  result = Node(kind: PyInt, i: i, typ: T.Int)
 
-proc pyHugeInt*(h: string): PythonNode =
-  result = PythonNode(kind: PyHugeInt, h: h, typ: T.HugeInt)
+proc pyHugeInt*(h: string): Node =
+  result = Node(kind: PyHugeInt, h: h, typ: T.HugeInt)
 
-proc pyFloat*(f: float): PythonNode =
-  result = PythonNode(kind: PyFloat, f: f, typ: T.Float)
+proc pyFloat*(f: float): Node =
+  result = Node(kind: PyFloat, f: f, typ: T.Float)
 
-proc pyBool*(b: bool): PythonNode =
-  result = PythonNode(kind: PyLabel, label: ($b).capitalizeAscii(), typ: T.Bool)
+proc pyBool*(b: bool): Node =
+  result = Node(kind: PyLabel, label: ($b).capitalizeAscii(), typ: T.Bool)
 
-proc pyString*(s: string, typ: Type = StringType): PythonNode =
-  result = PythonNode(kind: PyStr, s: s, typ: typ)
+proc pyString*(s: string, typ: Type = StringType): Node =
+  result = Node(kind: PyStr, s: s, typ: typ)
 
-proc pyChar*(c: char): PythonNode =
-  result = PythonNode(kind: PyChar, c: c, typ: T.Char)
+proc pyChar*(c: char): Node =
+  result = Node(kind: PyChar, c: c, typ: T.Char)
 
-proc pySeq*(children: seq[PythonNode], typ: Type = nil): PythonNode =
-  result = PythonNode(kind: PyList, children: children)
+proc pySeq*(children: seq[Node], typ: Type = nil): Node =
+  result = Node(kind: PyList, children: children)
   if typ == nil and len(children) > 0 and children[0].typ != nil:
     result.typ = seqType(children[0].typ)
   else:
     result.typ = nil
 
-proc pyTable*(keys: seq[PythonNode], values: seq[PythonNode], typ: Type = nil): PythonNode =
-  result = PythonNode(kind: PyDict, children: @[PythonNode(kind: Sequence, children: keys), PythonNode(kind: Sequence, children: values)])
+proc pyTable*(keys: seq[Node], values: seq[Node], typ: Type = nil): Node =
+  result = Node(kind: PyDict, children: @[Node(kind: Sequence, children: keys), Node(kind: Sequence, children: values)])
   if typ == nil and len(keys) > 0 and len(values) > 0 and keys[0].typ != nil and values[0].typ != nil:
     result.typ = tableType(keys[0].typ, values[0].typ)
   else:
     result.typ = nil
 
-proc pyBytes*(b: cstring): PythonNode =
-  result = PythonNode(kind: PyBytes, s: $b, typ: T.Bytes)
+proc pyBytes*(b: cstring): Node =
+  result = Node(kind: PyBytes, s: $b, typ: T.Bytes)
 
 proc isList*(typ: Type): bool =
   if typ.kind == N.Generic and typ == T.List:
@@ -108,7 +108,7 @@ proc isDict*(typ: Type): bool =
 
 var TRANSLATIONS = {"int": IntType, "float": FloatType, "str": StringType, "bool": BoolType}.toTable()
 
-proc toType*(node: PythonNode): Type =
+proc toType*(node: Node): Type =
   case node.kind:
   of PyLabel:
     if TRANSLATIONS.hasKey(node.label):
@@ -170,7 +170,7 @@ proc toType*(typ: PyType): Type =
     result = VoidType
 
 
-let PY_NIL* = PythonNode(kind: PyNone, children: @[], typ: VoidType)
-let PY_TRUE* = PythonNode(kind: PyLabel, label: "true", typ: BoolType)
-let PY_FALSE* = PythonNode(kind: PyLabel, label: "false", typ: BoolType)
+let PY_NIL* = Node(kind: PyNone, children: @[], typ: VoidType)
+let PY_TRUE* = Node(kind: PyLabel, label: "true", typ: BoolType)
+let PY_FALSE* = Node(kind: PyLabel, label: "false", typ: BoolType)
 let NIM_ANY* = Type(kind: N.Any)

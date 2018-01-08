@@ -3,10 +3,10 @@ import strformat, strutils, sequtils, python_ast
 type
   Module* = object
     name*: string
-    imports*: seq[PythonNode] # probably Import and Assign
-    types*: seq[PythonNode] # probably ClassDef
-    functions*: seq[PythonNode] # probably FunctionDef
-    init*: seq[PythonNode] # other top level stuff
+    imports*: seq[Node] # probably Import and Assign
+    types*: seq[Node] # probably ClassDef
+    functions*: seq[Node] # probably FunctionDef
+    init*: seq[Node] # other top level stuff
 
 proc `$`*(module: Module): string =
   let endl = "\n"

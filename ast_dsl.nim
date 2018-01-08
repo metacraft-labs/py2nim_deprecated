@@ -2,24 +2,24 @@ import macros, strformat, strutils, sequtils
 import python_ast, python_types
 
 template pyNone*: untyped =
-  PythonNode(kind: PyNone)
+  Node(kind: PyNone)
 
 proc expandLiteral(node: var NimNode): NimNode =
-  if node.kind == nnkObjConstr and $(node[0]) == "PythonNode":
+  if node.kind == nnkObjConstr and $(node[0]) == "Node":
     return node
   case node.kind:
   of nnkCharLit:
     result = quote:
-      PythonNode(kind: PyChar, c: ' ')
+      Node(kind: PyChar, c: ' ')
   of nnkIntLit..nnkUInt64Lit:
     result = quote:
-      PythonNode(kind: PyInt, i: `node`)
+      Node(kind: PyInt, i: `node`)
   of nnkFloatLit..nnkFloat128Lit:
     result = quote:
-      PythonNode(kind: PyFloat, f: `node`)
+      Node(kind: PyFloat, f: `node`)
   of nnkStrLit..nnkTripleStrLit:
     result = node #quote:
-      #PythonNode(kind: PyStr, s: `node`)
+      #Node(kind: PyStr, s: `node`)
   of nnkSym, nnkIdent:
     result = node
   else:
@@ -38,21 +38,21 @@ macro attribute*(label: static[string]): untyped =
   let base = newLit(fields[0])
   let field = newLit(fields[1])
   result = quote:
-    PythonNode(
+    Node(
       kind: PyAttribute,
       children: @[
-        PythonNode(kind: PyLabel, label: `base`),
-        PythonNode(kind: PyStr, s: `field`)])
+        Node(kind: PyLabel, label: `base`),
+        Node(kind: PyStr, s: `field`)])
 
 macro attribute*(base: untyped, attr: untyped): untyped =
   var baseL = base
   baseL = baseL.expandLiteral()
   result = quote:
-    PythonNode(
+    Node(
       kind: PyAttribute,
       children: @[
         `baseL`,
-        PythonNode(kind: PyStr, s: `attr`)])
+        Node(kind: PyStr, s: `attr`)])
 
 macro sequence*(args: varargs[untyped]): untyped =
   var elements = quote:
@@ -63,7 +63,7 @@ macro sequence*(args: varargs[untyped]): untyped =
     elements[z] = e.expandLiteral()
     z += 1
   result = quote:
-    PythonNode(
+    Node(
       kind: Sequence,
       children: `elements`)
 
@@ -76,7 +76,7 @@ macro list*(args: varargs[untyped]): untyped =
     elements[z] = e.expandLiteral()
     z += 1
   result = quote:
-    PythonNode(
+    Node(
       kind: PyList,
       children: `elements`)
 
@@ -85,26 +85,26 @@ macro assign*(target: untyped, value: untyped, declaration: untyped = nil): unty
   v = v.expandLiteral()
   var d = if declaration.isNil: nnkDotExpr.newTree(ident("Declaration"), ident("Existing")) else: declaration
   result = quote:
-    PythonNode(
+    Node(
       kind: PyAssign,
       declaration: `d`,
       children: @[
-        PythonNode(kind: Sequence, children: @[`target`]),
+        Node(kind: Sequence, children: @[`target`]),
         `v`])
 
 macro pyVarDef*(target: untyped, value: untyped): untyped =
   var v = value
   v = v.expandLiteral()
   result = quote:
-    PythonNode(
+    Node(
       kind: PyAssign,
       children: @[
-        PythonNode(kind: Sequence, children: @[`target`]),
+        Node(kind: Sequence, children: @[`target`]),
         `v`])
 
 macro label*(name: untyped): untyped =
   result = quote:
-    PythonNode(
+    Node(
       kind: PyLabel,
       label: `name`)
 
@@ -120,12 +120,12 @@ macro call*(f: untyped, args: untyped, typ: untyped = nil): untyped =
       children = nnkPrefix.newTree(ident("@"), nnkBracket.newTree(children))
   let t = if typ.isNil: newNilLit() else: typ
   let sequenceNode = quote:
-    PythonNode(kind: Sequence, children: `children`)
+    Node(kind: Sequence, children: `children`)
   result = quote:
-    PythonNode(kind: PyCall, children: @[`f`, `sequenceNode`, PythonNode(kind: Sequence, children: @[])], typ: `t`)
+    Node(kind: PyCall, children: @[`f`, `sequenceNode`, Node(kind: Sequence, children: @[])], typ: `t`)
 
 template operator*(op: untyped): untyped =
-  PythonNode(
+  Node(
     kind: PyOperator,
     label: `op`)
 
@@ -133,14 +133,14 @@ macro compare*(op: untyped, left: untyped, right: untyped, typ: untyped): untype
   var (l, r) = (left, right)
   (l, r) = (l.expandLiteral(), r.expandLiteral())
   result = quote:
-    PythonNode(
+    Node(
       kind: PyCompare,
       children: @[
         `l`,
-        PythonNode(
+        Node(
           kind: Sequence,
           children: @[`op`]),
-        PythonNode(
+        Node(
           kind: Sequence,
           children: @[`r`])],
       typ: `typ`)
@@ -150,7 +150,7 @@ macro binop*(left: untyped, op: untyped, right: untyped, typ: untyped = nil): un
   (l, r) = (l.expandLiteral(), r.expandLiteral())
   let t = if typ.kind == nnkNilLit: newNilLit() else: typ
   result = quote:
-    PythonNode(
+    Node(
       kind: PyBinOp,
       children: @[
         `l`,
@@ -168,7 +168,7 @@ macro slice*(startA: untyped, finishA: untyped = nil, stepA: untyped = nil): unt
   var step = if stepA.isNil: q else: stepA
   (finish, step) = (finish.expandLiteral(), step.expandLiteral())
   result = quote:
-    PythonNode(
+    Node(
       kind: PySlice,
       children: @[
         `start`,
@@ -179,26 +179,26 @@ macro subscript*(sequenceA: untyped, indexA: untyped): untyped =
   var (sequence, index) = (sequenceA, indexA)
   (sequence, index) = (sequence.expandLiteral(), index.expandLiteral())
   result = quote:
-    PythonNode(
+    Node(
       kind: PySubscript,
       children: @[
         `sequence`,
         `index`])
 
 template add*: untyped =
-  PythonNode(kind: PyAdd)
+  Node(kind: PyAdd)
 
 template sub*: untyped =
-  PythonNode(kind: PySub)
+  Node(kind: PySub)
 
 template mult*: untyped =
-  PythonNode(kind: PyMult)
+  Node(kind: PyMult)
 
 template pdiv*: untyped =
-  PythonNode(kind: PyDiv)
+  Node(kind: PyDiv)
 
 template eq*: untyped =
-  PythonNode(kind: PyEq)
+  Node(kind: PyEq)
 
 template notEq*: untyped =
-  PythonNode(kind: PyNotEq)
+  Node(kind: PyNotEq)

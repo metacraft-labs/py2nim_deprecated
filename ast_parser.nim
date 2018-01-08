@@ -4,16 +4,16 @@
 import macros, strutils, sequtils, strformat, tables
 import osproc, json, python_ast, python_types, gen_kind
 
-proc importAst*(ast: JsonNode): PythonNode =
+proc importAst*(ast: JsonNode): Node =
   if ast{"kind"} == nil:
     return nil
   var kind = ($ast{"kind"})[1..^2]
-  var node: PythonNode 
+  var node: Node 
   if kind == "PyNone":
-    return PythonNode(kind: PyNone)
-  for z in low(PythonNodeKind)..high(PythonNodeKind):
+    return Node(kind: PyNone)
+  for z in low(NodeKind)..high(NodeKind):
     if kind == $z:
-      node = genKind(PythonNode, z)
+      node = genKind(Node, z)
       break
   if node.isNil:
     echo fmt"add {kind} to python_ast.nim"

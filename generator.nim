@@ -34,17 +34,17 @@ let nilNode = nkNilLit.newTree()
 proc generateIdent(s: string): PNode =
   result = newIdentNode(PIdent(s: s), TLineInfo())
 
-proc generateNode(generator: var Generator, node: PythonNode): PNode
+proc generateNode(generator: var Generator, node: Node): PNode
 
-proc generateAssign(generator: var Generator, node: PythonNode): PNode
+proc generateAssign(generator: var Generator, node: Node): PNode
 
 proc generateType(generator: var Generator, typ: Type): PNode
 
-proc generateImports(generator: var Generator, imp: seq[PythonNode]): PNode =
+proc generateImports(generator: var Generator, imp: seq[Node]): PNode =
   assert len(imp) == 0 or imp[0].kind == PyImport
 
   var labels: seq[PNode] = @[]
-  var aliases: seq[PythonNode] = @[]
+  var aliases: seq[Node] = @[]
   for child in imp:
     labels = labels.concat(child.children.mapIt(generator.generateNode(it)))
     aliases = aliases.concat(child.aliases)
@@ -57,7 +57,7 @@ proc generateImports(generator: var Generator, imp: seq[PythonNode]): PNode =
   else:
     result = top
 
-proc generateClass(generator: var Generator, t: PythonNode): PNode =
+proc generateClass(generator: var Generator, t: Node): PNode =
   assert t.kind in {PyClassDef}
 
   assert t.typ.kind == N.Record
@@ -122,9 +122,9 @@ proc generateType(generator: var Generator, typ: Type): PNode =
     elif typ.isRef:
       result = nkRefTy.newTree(result)
 
-proc generateArgs(generator: var Generator, node: PythonNode, typ: Type): PNode
+proc generateArgs(generator: var Generator, node: Node, typ: Type): PNode
 
-proc generateForward(generator: var Generator, function: PythonNode): PNode =
+proc generateForward(generator: var Generator, function: Node): PNode =
   assert function.kind in {PyFunctionDef}
 
   let args = generator.generateArgs(function[1], function.typ)
@@ -144,7 +144,7 @@ proc generateForward(generator: var Generator, function: PythonNode): PNode =
   result.add(emptyNode)
   result.add(emptyNode)
 
-proc generateArgs(generator: var Generator, node: PythonNode, typ: Type): PNode =
+proc generateArgs(generator: var Generator, node: Node, typ: Type): PNode =
   ensure(Pyarguments)
 
   var iTyp = typ
@@ -161,7 +161,7 @@ proc generateArgs(generator: var Generator, node: PythonNode, typ: Type): PNode 
       emptyNode))
     z += 1
 
-proc generateFunction(generator: var Generator, function: PythonNode): PNode =
+proc generateFunction(generator: var Generator, function: Node): PNode =
   assert function.kind in {PyFunctionDef}
 
   result = generator.generateForward(function)
@@ -175,7 +175,7 @@ proc generateDeclaration(generator: var Generator, declaration: Declaration): st
   let declarations: array[Declaration, string] = ["", "let ", "var ", "const "]
   result = declarations[declaration]
 
-proc generateAssign(generator: var Generator, node: PythonNode): PNode =
+proc generateAssign(generator: var Generator, node: Node): PNode =
   ensure(PyAssign)
 
   let name = emitNode(node[0][0])
@@ -190,12 +190,12 @@ proc generateAssign(generator: var Generator, node: PythonNode): PNode =
   of Declaration.Existing:
     result = nkAsgn.newTree(name, value)
 
-proc generateLabel(generator: var Generator, node: PythonNode): PNode =
+proc generateLabel(generator: var Generator, node: Node): PNode =
   ensure(PyLabel)
 
   result = generateIdent(node.label)
 
-proc generateIf(generator: var Generator, node: PythonNode): PNode =
+proc generateIf(generator: var Generator, node: Node): PNode =
   # ugh python uses if(test, body, orelse=if(test, body, orelse..))
   # and nim if(elif(test, body), elif(test, body)..)
   ensure(PyIf)
@@ -217,7 +217,7 @@ proc generateIf(generator: var Generator, node: PythonNode): PNode =
         break
     result.add(elifBranch)
 
-proc generateWhen(generator: var Generator, node: PythonNode): PNode =
+proc generateWhen(generator: var Generator, node: Node): PNode =
   ensure(NimWhen)
 
   result = nkWhen.newTree(
@@ -227,14 +227,14 @@ proc generateWhen(generator: var Generator, node: PythonNode): PNode =
   if not node[2].isNil and len(node[2].children) > 0:
     result[0].add(nkElse.newTree(emitNode(node[2])))
 
-proc generateSequence(generator: var Generator, node: PythonNode): PNode =
+proc generateSequence(generator: var Generator, node: Node): PNode =
   ensure(Sequence)
 
   result = nkStmtList.newTree()
   for child in node.children:
     result.add(emitNode(child))
 
-proc generateCall(generator: var Generator, node: PythonNode): PNode =
+proc generateCall(generator: var Generator, node: Node): PNode =
   ensure(PyCall)
 
   result = nkCall.newTree(emitNode(node[0]))
@@ -245,31 +245,31 @@ proc generateCall(generator: var Generator, node: PythonNode): PNode =
     result.kind = nkCommand
 
 
-proc generateReturn(generator: var Generator, node: PythonNode): PNode =
+proc generateReturn(generator: var Generator, node: Node): PNode =
   ensure(PyReturn)
 
   result = nkReturnStmt.newTree(emitNode(node[0]))
 
-proc generateInt(generator: var Generator, node: PythonNode): PNode =
+proc generateInt(generator: var Generator, node: Node): PNode =
   ensure(PyInt)
 
   result = nkIntLit.newNode()
   result.intVal = node.i
 
-proc generateFloat(generator: var Generator, node: PythonNode): PNode =
+proc generateFloat(generator: var Generator, node: Node): PNode =
   ensure(PyFloat)
 
   result = nkFloatLit.newNode()
   result.floatVal = node.f
 
-proc generateAttribute(generator: var Generator, node: PythonNode): PNode =
+proc generateAttribute(generator: var Generator, node: Node): PNode =
   ensure(PyAttribute)
 
   assert node[1].kind == PyStr
 
   result = nkDotExpr.newTree(emitNode(node[0]), generateIdent(node[1].s))
 
-proc generateStr(generator: var Generator, node: PythonNode): PNode =
+proc generateStr(generator: var Generator, node: Node): PNode =
   ensure(PyStr)
 
   result = nkStrLit.newNode()
@@ -298,11 +298,11 @@ let SYMBOLS* = {
   PyNotIn: "notin"
 }.toTable()
 
-proc generateOp(generator: var Generator, op: PythonNode): PNode =
+proc generateOp(generator: var Generator, op: Node): PNode =
   let s = if SYMBOLS.hasKey(op.kind): SYMBOLS[op.kind] else: op.label
   result = generateIdent(s)
 
-proc generateBinOp(generator: var Generator, node: PythonNode): PNode =
+proc generateBinOp(generator: var Generator, node: Node): PNode =
   ensure(PyBinOp)
 
   result = nkInfix.newTree(
@@ -310,7 +310,7 @@ proc generateBinOp(generator: var Generator, node: PythonNode): PNode =
     emitNode(node[0]),
     emitNode(node[2]))
 
-proc generateCompare(generator: var Generator, node: PythonNode): PNode =
+proc generateCompare(generator: var Generator, node: Node): PNode =
   ensure(PyCompare)
 
   result = nkInfix.newTree(
@@ -318,7 +318,7 @@ proc generateCompare(generator: var Generator, node: PythonNode): PNode =
     emitNode(node[0]),
     emitNode(node[2][0]))
 
-proc generateConstr(generator: var Generator, node: PythonNode): PNode =
+proc generateConstr(generator: var Generator, node: Node): PNode =
   assert node[0].typ.kind == N.Record
 
   if node[0].typ.init == "":
@@ -332,7 +332,7 @@ proc generateConstr(generator: var Generator, node: PythonNode): PNode =
     for child in node[2]:
       result.add(emitNode(child))  
 
-proc generateNameConstant(generator: var Generator, node: PythonNode): PNode =
+proc generateNameConstant(generator: var Generator, node: Node): PNode =
   let label = node[0].label
   case label:
   of "True", "False":
@@ -340,7 +340,7 @@ proc generateNameConstant(generator: var Generator, node: PythonNode): PNode =
   else:
     result = nilNode
 
-proc generateFor(generator: var Generator, node: PythonNode): PNode =
+proc generateFor(generator: var Generator, node: Node): PNode =
   var code = nkStmtList.newTree()
   for child in node[2]:
     code.add(emitNode(child))
@@ -356,80 +356,83 @@ proc generateFor(generator: var Generator, node: PythonNode): PNode =
       emitNode(node[1]),
       code)
 
-proc generateList(generator: var Generator, node: PythonNode): PNode =
+proc generateList(generator: var Generator, node: Node): PNode =
   result = nkPrefix.newTree(generateIdent("@"), nkBracket.newTree())
   for child in node:
     result[1].add(emitNode(child))
 
-proc generateRangeLess(generator: var Generator, node: PythonNode): PNode =
+proc generateRangeLess(generator: var Generator, node: Node): PNode =
   result = nkInfix.newTree(generateIdent("..<"), emitNode(node[0]), emitNode(node[1]))
 
-proc generateDict(generator: var Generator, node: PythonNode): PNode =
+proc generateDict(generator: var Generator, node: Node): PNode =
   var dict = nkTableConstr.newTree()
   for z in 0..<len(node[0].children):
     dict.add(nkExprColonExpr.newTree(emitNode(node[0][z]), emitNode(node[1][z])))
   result = nkCall.newTree(nkDotExpr.newTree(dict, generateIdent("toTable")))
 
-proc generateWhile(generator: var Generator, node: PythonNode): PNode =
+proc generateWhile(generator: var Generator, node: Node): PNode =
   result = nkWhileStmt.newTree(emitNode(node[0]), emitNode(node[1]))
 
-proc generateUnaryOp(generator: var Generator, node: PythonNode): PNode =
+proc generateUnaryOp(generator: var Generator, node: Node): PNode =
   result = nkPrefix.newTree(generator.generateOp(node[0]), emitNode(node[1]))
 
-proc generateExprColonExpr(generator: var Generator, node: PythonNode): PNode =
+proc generateExprColonExpr(generator: var Generator, node: Node): PNode =
   result = nkExprColonExpr.newtree(emitNode(node[0]), emitNode(node[1]))
 
-proc generateTry(generator: var Generator, node: PythonNode): PNode =
+proc generateTry(generator: var Generator, node: Node): PNode =
   result = nkTryStmt.newTree(emitNode(node[0]))
   for child in node[1]:
     result.add(emitNode(child))
 
-proc generateSubscript(generator: var Generator, node: PythonNode): PNode =
+proc generateSubscript(generator: var Generator, node: Node): PNode =
   result = nkBracketExpr.newTree(emitNode(node[0]), emitNode(node[1]))
 
-proc generateExceptHandler(generator: var Generator, node: PythonNode): PNode =
+proc generateExceptHandler(generator: var Generator, node: Node): PNode =
   result = nkExceptBranch.newTree(
     if node[0].kind != PyNone: emitNode(node[0]) else: emptyNode,
     emitNode(node[1]))
 
-proc generateRaise(generator: var Generator, node: PythonNode): PNode =
+proc generateRaise(generator: var Generator, node: Node): PNode =
   result = nkRaiseStmt.newTree(emitNode(node[0]))
 
-proc generateInfix(generator: var Generator, node: PythonNode): PNode =
+proc generateInfix(generator: var Generator, node: Node): PNode =
   result = nkInfix.newTree(emitNode(node[0]), emitNode(node[1]), emitNode(node[2]))
 
-proc generateAccQuoted(generator: var Generator, node: PythonNode): PNode =
+proc generateAccQuoted(generator: var Generator, node: Node): PNode =
   result = nkAccQuoted.newTree(emitNode(node[0]))
 
-proc generateBytes(generator: var Generator, node: PythonNode): PNode =
+proc generateBytes(generator: var Generator, node: Node): PNode =
   var r = nkRStrLit.newNode()
   r.strVal = node.s
   result = nkCallStrLit.newTree(generateIdent("cstring"), r)
 
-proc generateYield(generator: var Generator, node: PythonNode): PNode =
+proc generateYield(generator: var Generator, node: Node): PNode =
   result = nkYieldStmt.newTree(emitNode(node[0]))
 
-proc generateBreak(generator: var Generator, node: PythonNode): PNode =
+proc generateBreak(generator: var Generator, node: Node): PNode =
   result = nkBreakStmt.newTree(emptyNode)
 
-proc generateWith(generator: var Generator, node: PythonNode): PNode =
+proc generateWith(generator: var Generator, node: Node): PNode =
   result = nkCommand.newTree(
     generateIdent("with"),
     emitNode(node[0][0]),
     emitNode(node[1]))
 
-proc generateOf(generator: var Generator, node: PythonNode): PNode =
+proc generateOf(generator: var Generator, node: Node): PNode =
   result = nkInfix.newTree(generateIdent("of"), emitNode(node[0]), emitNode(node[1]))
 
-proc generateTuple(generator: var Generator, node: PythonNode): PNode =
+proc generateTuple(generator: var Generator, node: Node): PNode =
   result = nkPar.newTree()
   for child in node:
     result.add(emitNode(child))
 
-proc generateNode(generator: var Generator, node: PythonNode): PNode =
+proc generatePrefix(generator: var Generator, node: Node): PNode =
+  result = nkPrefix.newTree(emitNode(node[0]), emitNode(node[1]))
+
+proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
-  # log fmt"generate {node.kind}"
+  log fmt"generate {node.kind}"
   case node.kind:
   of PyAssign:
     result = generator.generateAssign(node)
@@ -503,6 +506,8 @@ proc generateNode(generator: var Generator, node: PythonNode): PNode =
     result = generator.generateOf(node)
   of PyTuple:
     result = generator.generateTuple(node)
+  of NimPrefix:
+    result = generator.generatePrefix(node)
   else:
     echo "?", node.kind
     result = emptyNode

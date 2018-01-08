@@ -10,7 +10,7 @@ type
   Compiler* = object
     db*: DeducktDb
     command: string
-    asts*: Table[string, PythonNode]
+    asts*: Table[string, Node]
     modules*: Table[string, Module]
     maybeModules*: Table[string, bool]
     stack*: seq[(string, seq[(Type, string)])]
@@ -36,19 +36,19 @@ proc moduleOf*(compiler: Compiler, name: string): string =
   m.add(name)
   result = m.join(".")
 
-proc compileNode*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode
+proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node
 
-proc mergeFunctionTypeInfo(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode
+proc mergeFunctionTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node
 
-proc replaceNode(node: PythonNode, original: PythonNode, newNode: PythonNode): PythonNode
+proc replaceNode(node: Node, original: Node, newNode: Node): Node
 
 proc registerImport(compiler: var Compiler, label: string)
 
-proc typed(node: var PythonNode, typ: Type): PythonNode =
+proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
   result = node
 
-proc collapse(node: PythonNode): seq[PythonNode] =
+proc collapse(node: Node): seq[Node] =
   case node.kind:
   of Sequence:
     result = @[]
@@ -57,12 +57,12 @@ proc collapse(node: PythonNode): seq[PythonNode] =
   else:
     result = @[node]
 
-proc compileModule*(compiler: var Compiler, file: string, node: PythonNode): Module =
+proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   var moduleEnv = compiler.envs[file]
-  var childNodes: seq[PythonNode] = @[]
+  var childNodes: seq[Node] = @[]
   for child in node.mitems:
     childNodes.add(compiler.compileNode(child, moduleEnv))
-  var collapsedNodes: seq[PythonNode] = @[]
+  var collapsedNodes: seq[Node] = @[]
   for child in childNodes.mitems:
     collapsedNodes = collapsedNodes.concat(collapse(child))
   result = compiler.modules[file]
@@ -77,19 +77,19 @@ proc compileModule*(compiler: var Compiler, file: string, node: PythonNode): Mod
     else:
       result.init.add(child)
 
-proc compileImport(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileImport(compiler: var Compiler, node: var Node, env: var Env): Node =
   # store imports
   # by default make them false in maybeModules:
   # only if the module is used, toggle it
   assert node.kind == PyImport
   if node[0].kind == Pyalias and node[0][0].kind == PyStr:
     compiler.maybeModules[node[0][0].s] = false
-    result = PythonNode(kind: PyImport, children: @[pyLabel(node[0][0].s)])
+    result = Node(kind: PyImport, children: @[pyLabel(node[0][0].s)])
   else:
     warn("import")
-    result = PythonNode(kind: Sequence, children: @[])
+    result = Node(kind: Sequence, children: @[])
 
-proc compileImportFrom(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileImportFrom(compiler: var Compiler, node: var Node, env: var Env): Node =
   # from x import original
   #
   # import x
@@ -100,9 +100,9 @@ proc compileImportFrom(compiler: var Compiler, node: var PythonNode, env: var En
   # alias = original
 
   if node.kind != PyImportFrom or node[0].kind != PyStr:
-    return PythonNode(kind: Sequence, children: @[])
+    return Node(kind: Sequence, children: @[])
   let m = node[0].s
-  var aliases: seq[PythonNode] = @[]
+  var aliases: seq[Node] = @[]
   for child in node[1]:
     if child.kind == Pyalias:
       assert child[0].kind == PyStr
@@ -113,10 +113,10 @@ proc compileImportFrom(compiler: var Compiler, node: var PythonNode, env: var En
         env[alias] = compiler.db.types[fullName]
       if original != alias:
         aliases.add(assign(label(alias), attribute(label(m), original), Declaration.Var))
-  result = PythonNode(kind: PyImport, children: @[pyLabel(m)], aliases: aliases)
+  result = Node(kind: PyImport, children: @[pyLabel(m)], aliases: aliases)
   compiler.maybeModules[fmt"{compiler.base}/{m}.py"] = true
 
-proc compileAssign(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
   let value = compiler.compileNode(node[1], env)
   if len(node[0].children) > 1:
     warn("assign")
@@ -131,7 +131,7 @@ proc compileAssign(compiler: var Compiler, node: var PythonNode, env: var Env): 
     node[1] = value
   result = node
 
-proc compilePrint(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
+proc compilePrint(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   # variadic
   var printArgs = args
   # for z, arg in args:
@@ -139,31 +139,31 @@ proc compilePrint(compiler: var Compiler, name: string, args: seq[PythonNode], e
   #     printArgs[z] = call(label("$"), @[arg], T.String)
   result = call(label("echo"), printArgs, T.Void)
 
-proc compileSpecialStrMethod(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
+proc compileSpecialStrMethod(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   result = call(label("$"), args, T.String)
 
-proc compileLen(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
-  var a: seq[PythonNode] = @[]
+proc compileLen(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  var a: seq[Node] = @[]
   for arg in args:
     var arg2 = arg
     a.add(compiler.compileNode(arg2, env))
   if len(a) != 1:
-    result = call(PythonNode(kind: PyLabel, label: name), a, NIM_ANY)
+    result = call(Node(kind: PyLabel, label: name), a, NIM_ANY)
   else:
-    result = call(PythonNode(kind: PyLabel, label: name), a, T.Int)
+    result = call(Node(kind: PyLabel, label: name), a, T.Int)
 
-proc compileReversed(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
+proc compileReversed(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   if len(args) == 1:
-    result = call(PythonNode(kind: PyLabel, label: name), args, args[0].typ)
+    result = call(Node(kind: PyLabel, label: name), args, args[0].typ)
     compiler.registerImport("algorithm")
   else:
-    result = call(PythonNode(kind: PyLabel, label: name), args, NIM_ANY)
+    result = call(Node(kind: PyLabel, label: name), args, NIM_ANY)
 
-proc compileIsinstance(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
-  result = PythonNode(kind: NimOf, children: args, typ: T.Bool)
+proc compileIsinstance(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  result = Node(kind: NimOf, children: args, typ: T.Bool)
 
-proc compileInt(compiler: var Compiler, name: string, args: seq[PythonNode], env: var Env): PythonNode =
-  result = call(PythonNode(kind: PyLabel, label: name), args, T.Int)
+proc compileInt(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  result = call(Node(kind: PyLabel, label: name), args, T.Int)
 
 var BUILTIN* = {
   "print": "echo"
@@ -178,7 +178,7 @@ var SPECIAL_FUNCTIONS* = {
   "int": compileInt
 }.toTable()
 
-proc compileCall*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
   let function = compiler.compileNode(node[0], env)
   let args = compiler.compileNode(node[1], env)
   if function.typ.isNil and (function.kind != PyLabel or function.label notin SPECIAL_FUNCTIONS):
@@ -203,23 +203,33 @@ proc compileCall*(compiler: var Compiler, node: var PythonNode, env: var Env): P
       if function.typ.kind == N.Any:
         result.typ = function.typ
       elif function.typ.kind == N.Record:
-        result.kind = PyConstr
-        result[2] = result[1]
-        var members: seq[PythonNode] = @[]
+        if function.kind != PyLabel or function.label != function.typ.label:
+          var call = fmt"{function.typ.fullLabel}#__call__"
+          if compiler.db.types.hasKey(call):
+            var typ = compiler.db.types[call]
+            if not typ.isNil and typ.kind == N.Function:
+              function.typ = typ
+              result.typ = typ.returnType
+              return
+          result.typ = NIM_ANY
+        else:
+          result.kind = PyConstr
+          result[2] = result[1]
+        var members: seq[Node] = @[]
         for member, _ in function.typ.members:
           members.add(label(member))
-        result[1] = PythonNode(kind: Sequence, children: members)
+        result[1] = Node(kind: Sequence, children: members)
         result.typ = function.typ
       else:
         # echo fmt"wtf {function.typ}"
         result.typ = function.typ
 
-proc compileLabel*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileLabel*(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node.kind == PyLabel
   if node.label in SPECIAL_FUNCTIONS:
     result = node
   elif node.label == "True" or node.label == "False":
-    result = PythonNode(kind: PyLabel, label: node.label.toLowerAscii(), typ: T.Bool)
+    result = Node(kind: PyLabel, label: node.label.toLowerAscii(), typ: T.Bool)
   elif node.label == "None":
     result = PY_NIL
   else:
@@ -228,25 +238,25 @@ proc compileLabel*(compiler: var Compiler, node: var PythonNode, env: var Env): 
       typ = env.get(fmt"{compiler.currentModule}.{node.label}")
     result = typed(node, typ)
 
-proc compileStr(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileStr(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.String)
 
-proc compileInt(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileInt(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.Int)
 
-proc compileHugeInt(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileHugeInt(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.HugeInt)
 
-proc compileFloat(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileFloat(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.Float)
 
-proc compileConstant(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileConstant(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.Bool)
 
-proc compileExpr(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileExpr(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = compiler.compileNode(node[0], env)
 
-proc compileBinOp(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
   var left = compiler.compileNode(node[0], env)
   var right = compiler.compileNode(node[2], env)
   let op = node[1]
@@ -268,7 +278,7 @@ proc compileBinOp(compiler: var Compiler, node: var PythonNode, env: var Env): P
   else:
     result = applyOperatorIdiom(result)
 
-proc pureConstr(compiler: var Compiler, node: var PythonNode): bool =
+proc pureConstr(compiler: var Compiler, node: var Node): bool =
   let args = node[1][0].mapIt(it[0].s)
   for child in node[2]:
     if child.kind != PyAssign or len(child[0].children) != 1 or child[0][0].kind != PyAttribute or
@@ -277,7 +287,7 @@ proc pureConstr(compiler: var Compiler, node: var PythonNode): bool =
        return false
   return true
 
-proc translateInit(compiler: var Compiler, node: var PythonNode, env: var Env, child: bool = false, assignments: seq[PythonNode] = @[]): PythonNode =
+proc translateInit(compiler: var Compiler, node: var Node, env: var Env, child: bool = false, assignments: seq[Node] = @[]): Node =
   result = node
   if not child:
     result[0].s = compiler.currentClass.init
@@ -299,9 +309,9 @@ proc translateInit(compiler: var Compiler, node: var PythonNode, env: var Env, c
       result[z] = compiler.translateInit(next, env, true)
       z += 1
 
-proc replaceReturnYield(node: PythonNode): PythonNode =
+proc replaceReturnYield(node: Node): Node =
   if node.kind == PyReturn:
-    return PythonNode(kind: PyYield, children: node.children)
+    return Node(kind: PyYield, children: node.children)
   else:
     result = node
     var z = 0
@@ -309,7 +319,7 @@ proc replaceReturnYield(node: PythonNode): PythonNode =
       result[z] = replaceReturnYield(child)
       z += 1
 
-proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var Env, assignments: seq[PythonNode] = @[], fTyp: Type = nil): PythonNode =
+proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, assignments: seq[Node] = @[], fTyp: Type = nil): Node =
   assert node.kind == PyFunctionDef
 
   var f = node[0]
@@ -318,9 +328,9 @@ proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var E
 
   let typ = if fTyp.isNil: env.get(label) else: fTyp
   if typ.isNil or typ.kind notin {N.Overloads, N.Function}:
-    return PythonNode(kind: Sequence, children: @[])
+    return Node(kind: Sequence, children: @[])
   elif typ.kind == N.Overloads:
-    result = PythonNode(kind: Sequence, children: @[])
+    result = Node(kind: Sequence, children: @[])
     for overload in typ.overloads:
       # echo fmt"compile {overload}"
       result.children.add(compiler.compileFunctionDef(node, env, fTyp=overload))
@@ -329,7 +339,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var E
   if label == "__init__":
     if len(assignments) == 0 and compiler.pureConstr(node):
       compiler.currentClass.init = ""
-      return PythonNode(kind: Sequence, children: @[])
+      return Node(kind: Sequence, children: @[])
       # TODO mark it so we can use PyConstr
       # and rename to newType, change return type and remove self otherwise
       # idiomatic function
@@ -344,22 +354,22 @@ proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var E
     node[0].s = label
   elif label == "__getitem__":
     label = "[]"
-    node[0] = PythonNode(kind: NimAccQuoted, children: @[PythonNode(kind: PyLabel, label: label)])
+    node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
   elif label == "__setitem__":
     label = "[]="
-    node[0] = PythonNode(kind: NimAccQuoted, children: @[PythonNode(kind: PyLabel, label: label)])
+    node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
   elif label == "__iter__":
-    if len(node[2].children) != 1 or not node[2][0].testEq(PythonNode(kind: PyReturn, children: @[PythonNode(kind: PyLabel, label: "self")])):
+    if len(node[2].children) != 1 or not node[2][0].testEq(Node(kind: PyReturn, children: @[Node(kind: PyLabel, label: "self")])):
       warn("def __iter__(self): return self only supported")
-    result = PythonNode(kind: Sequence, children: @[])
+    result = Node(kind: Sequence, children: @[])
     return
   elif label == "__next__":
     node[2] = replaceReturnYield(node[2])
-    node[2] = replaceNode(node[2], PythonNode(kind: PyRaise, children: @[call(PythonNode(kind: PyLabel, label: "StopIteration"), @[], T.Void), PY_NIL]), PythonNode(kind: PyBreak, children: @[]))
-    node[2] = PythonNode(
+    node[2] = replaceNode(node[2], Node(kind: PyRaise, children: @[call(Node(kind: PyLabel, label: "StopIteration"), @[], T.Void), PY_NIL]), Node(kind: PyBreak, children: @[]))
+    node[2] = Node(
       kind: Sequence,
       children: @[
-        PythonNode(
+        Node(
           kind: PyWhile,
           children: @[pyBool(true), node[2]])])
     label = "items"
@@ -380,7 +390,11 @@ proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var E
       typ.functionArgs[3] = T.String
   elif label == "__str__":
     label = "$"
-    node[0] = PythonNode(kind: NimAccQuoted, children: @[PythonNode(kind: PyLabel, label: label)])
+    node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
+  elif label == "__call__":
+    # TODO: use {} in future, () is deprecated
+    label = "()"
+    node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
 
   var args = initTable[string, Type]()
   var z = 0
@@ -410,7 +424,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var PythonNode, env: var E
   else:
     result = node
 
-proc compileAttribute*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileAttribute*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
   var base = compiler.compileNode(node[0], env)
   var typ = base.typ
@@ -456,14 +470,14 @@ proc compileAttribute*(compiler: var Compiler, node: var PythonNode, env: var En
     elif result.typ.functionArgs[0].kind == N.Record and result.typ.functionArgs[0].members.hasKey(node[1].s):
       result.typ = result.typ.returnType
 
-proc compileSequence*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileSequence*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
   var z = 0
   for child in result.children.mitems:
     result.children[z] = compiler.compileNode(child, env)
     z += 1
 
-proc compileList*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileList*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
   var z = 0
   for child in result.children.mitems:
@@ -475,26 +489,26 @@ proc compileList*(compiler: var Compiler, node: var PythonNode, env: var Env): P
     result.typ = seqType(NIM_ANY)
 
 
-proc compileReturn(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileReturn(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[0] = compiler.compileNode(node[0], env)
   if node[0].typ != env.returnType:
     warn(fmt"{compiler.currentFunction} expected {$env.returnType} got {$node[0].typ} return")
   result = node
 
-proc compileIf(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileIf(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
   if node[0].kind == PyCompare and node[0][0].kind == PyLabel and
      node[0][0].label == "__name__" and
      node[0][1][0].kind == PyEq and node[0][2][0].kind == PyStr and node[0][2][0].s == "__main__":
     result.kind = NimWhen
-    result[0] = PythonNode(kind: PyLabel, label: "isMainModule", typ: T.Bool)
+    result[0] = Node(kind: PyLabel, label: "isMainModule", typ: T.Bool)
   else:
     result[0] = compiler.compileNode(node[0], env)
     if result[0].typ != T.Bool:
       warn(fmt"expected bool got {$result[0].typ} if")
   result[1] = compiler.compileNode(node[1], env)
 
-proc compileCompare(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileCompare(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: compound compare
   var left = compiler.compileNode(node[0], env)
   var op = node[1][0]
@@ -508,28 +522,28 @@ proc compileCompare(compiler: var Compiler, node: var PythonNode, env: var Env):
   result.typ = T.Bool
 
 
-proc createInit(compiler: var Compiler, assignments: seq[PythonNode]): PythonNode =
+proc createInit(compiler: var Compiler, assignments: seq[Node]): Node =
   if compiler.currentClass.isRef:
     compiler.currentClass.init = fmt"new{compiler.currentClass.label}"
   else:
     compiler.currentClass.init = fmt"make{compiler.currentClass.label}"
-  result = PythonNode(
+  result = Node(
     kind: PyFunctionDef,
     children: @[
-      PythonNode(kind: PyStr, s: compiler.currentClass.init),
-      PythonNode(kind: Pyarguments, children: @[PythonNode(kind: Sequence, children: @[]), PY_NIL, PythonNode(kind: Sequence, children: @[])]),
-      PythonNode(kind: Sequence, children: assignments),
+      Node(kind: PyStr, s: compiler.currentClass.init),
+      Node(kind: Pyarguments, children: @[Node(kind: Sequence, children: @[]), PY_NIL, Node(kind: Sequence, children: @[])]),
+      Node(kind: Sequence, children: assignments),
       PY_NIL])
   result.typ = Type(kind: N.Function, label: compiler.currentClass.init, functionArgs: @[], returnType: compiler.currentClass)
 
-proc compileClassDef(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node[0].kind == PyStr
   let label = node[0].s
   var typ = env[label]
   compiler.currentClass = typ
   compiler.currentClass.init = ""
 
-  node[0] = PythonNode(kind: PyLabel, label: label)
+  node[0] = Node(kind: PyLabel, label: label)
 
   if node[1].kind == Sequence and len(node[1].children) > 0:
     if len(node[1].children) == 1 and node[1][0].kind == PyLabel:
@@ -540,18 +554,18 @@ proc compileClassDef(compiler: var Compiler, node: var PythonNode, env: var Env)
   result = node
 
   if len(node[3].children) > 0:
-    result = PythonNode(kind: Sequence, children: @[result])
+    result = Node(kind: Sequence, children: @[result])
 
     var classEnv = childEnv(env, label, initTable[string, Type](), nil)
 
     var z = 0
-    var assignments: seq[PythonNode] = @[]
+    var assignments: seq[Node] = @[]
     for child in node[3].mitems:
       if child.kind == PyFunctionDef:
         node[3][z] = compiler.mergeFunctionTypeInfo(child, classEnv)
       elif child.kind == PyAssign and len(child[0].children) == 1 and child[0][0].kind == PyLabel:
         var value = compiler.compileNode(child[1], classEnv)
-        assignments.add(assign(attribute(PythonNode(kind: PyLabel, label: "result"), child[0][0].label), value))
+        assignments.add(assign(attribute(Node(kind: PyLabel, label: "result"), child[0][0].label), value))
         if not typ.members.hasKey(child[0][0].label):
           typ.members[child[0][0].label] = value.typ
       z += 1
@@ -568,7 +582,7 @@ proc compileClassDef(compiler: var Compiler, node: var PythonNode, env: var Env)
       result.children.add(compiler.createInit(assignments))
   compiler.currentClass = nil
 
-proc replaceFile(compiler: var Compiler, node: var PythonNode, handler: string, filename: PythonNode): PythonNode =
+proc replaceFile(compiler: var Compiler, node: var Node, handler: string, filename: Node): Node =
   result = nil
   if node.kind == PyCall and node[0].kind == PyAttribute and node[0][0].kind == PyLabel and 
      node[0][0].label == handler:
@@ -587,7 +601,7 @@ proc replaceFile(compiler: var Compiler, node: var PythonNode, handler: string, 
       result[z] = compiler.replaceFile(child, handler, filename)
       z += 1
 
-proc compileWith(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileWith(compiler: var Compiler, node: var Node, env: var Env): Node =
   # with open(filename, mode) as f:
   #    code .. 
   #    f.read() / f.write(source) 
@@ -614,10 +628,10 @@ proc compileWith(compiler: var Compiler, node: var PythonNode, env: var Env): Py
     result = compiler.replaceFile(code, handler.label, filename)
     result = compiler.compileNode(result, env)
   else:
-    result = PythonNode(
+    result = Node(
       kind: PyWith,
       children: @[
-        PythonNode(
+        Node(
           kind: Pywithitem,
           children: @[
             compiler.compileNode(header, env),
@@ -625,7 +639,7 @@ proc compileWith(compiler: var Compiler, node: var PythonNode, env: var Env): Py
         compiler.compileNode(code, env)])
     compiler.registerImport("py2nim_helpers")
 
-proc compileFor*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileFor*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # for element in a:
   #   code
   # 
@@ -683,16 +697,16 @@ proc compileFor*(compiler: var Compiler, node: var PythonNode, env: var Env): Py
         env[element[0].label] = element[0].typ
         env[element[1].label] = element[1].typ
   elif sequence.kind == PyCall and sequence[0].kind == PyLabel and sequence[0].label == "range":
-    var start: PythonNode
-    var finish: PythonNode
+    var start: Node
+    var finish: Node
     if len(sequence[1].children) == 1:
       start = pyInt(0)
       finish = sequence[1][0]
-      node[1] = PythonNode(kind: NimRangeLess, children: @[start, finish])
+      node[1] = Node(kind: NimRangeLess, children: @[start, finish])
     elif len(sequence[1].children) == 2:
       start = sequence[1][0]
       finish = sequence[1][1]
-      node[1] = PythonNode(kind: NimRangeLess, children: @[start, finish])
+      node[1] = Node(kind: NimRangeLess, children: @[start, finish])
     elif len(sequence[1].children) == 3:
       node[1][0].label = "countup"
     if element.kind == PyLabel:
@@ -710,9 +724,9 @@ proc registerImport(compiler: var Compiler, label: string) =
     if imp.children[0].label == label:
       return
 
-  compiler.modules[compiler.path].imports.add(PythonNode(kind: PyImport, children: @[PythonNode(kind: PyLabel, label: label)], aliases: @[]))
+  compiler.modules[compiler.path].imports.add(Node(kind: PyImport, children: @[Node(kind: PyLabel, label: label)], aliases: @[]))
 
-proc compileDict(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileDict(compiler: var Compiler, node: var Node, env: var Env): Node =
   if len(node[0].children) > 0:
     node[0] = compiler.compileNode(node[0], env)
     node[1] = compiler.compileNode(node[1], env)
@@ -722,7 +736,7 @@ proc compileDict(compiler: var Compiler, node: var PythonNode, env: var Env): Py
   result = node
   compiler.registerImport("tables")
 
-proc toBool(test: PythonNode): PythonNode =
+proc toBool(test: Node): Node =
   if test.typ == T.Bool:
     result = test
   elif test.typ == T.Int:
@@ -732,9 +746,9 @@ proc toBool(test: PythonNode): PythonNode =
   elif test.typ == T.String:
     result = compare(notEq(), test, pyString(""), T.Bool)
   else:
-    result = PythonNode(kind: PyUnaryOp, children: @[operator("not"), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
+    result = Node(kind: PyUnaryOp, children: @[operator("not"), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
 
-proc compileWhile(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileWhile(compiler: var Compiler, node: var Node, env: var Env): Node =
   var test = compiler.compileNode(node[0], env)
   if test.typ != T.Bool:
     test = toBool(test)
@@ -742,10 +756,10 @@ proc compileWhile(compiler: var Compiler, node: var PythonNode, env: var Env): P
   node[1] = compiler.compileNode(node[1], env)
   result = node
 
-proc commentedOut(s: string): PythonNode =
-  result = PythonNode(kind: NimCommentedOut, children: @[PythonNode(kind: PyStr, s: s, typ: T.String)], typ: NIM_ANY)
+proc commentedOut(s: string): Node =
+  result = Node(kind: NimCommentedOut, children: @[Node(kind: PyStr, s: s, typ: T.String)], typ: NIM_ANY)
 
-proc replaceNode(node: PythonNode, original: PythonNode, newNode: PythonNode): PythonNode =
+proc replaceNode(node: Node, original: Node, newNode: Node): Node =
   if node.testEq(original):
     result = newNode
   else:
@@ -755,7 +769,7 @@ proc replaceNode(node: PythonNode, original: PythonNode, newNode: PythonNode): P
       result[z] = replaceNode(child, original, newNode)
       z += 1
 
-proc compileListComp(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileListComp(compiler: var Compiler, node: var Node, env: var Env): Node =
   # [code for element in a]
   #
   # becomes
@@ -782,23 +796,23 @@ proc compileListComp(compiler: var Compiler, node: var PythonNode, env: var Env)
     return commentedOut($node)    
   let types = {"it": sequence.typ.args[0]}.toTable()
   var codeEnv = childEnv(env, "<code>", types, nil)
-  var mapIt = replaceNode(code, element, PythonNode(kind: PyLabel, label: "it"))
+  var mapIt = replaceNode(code, element, Node(kind: PyLabel, label: "it"))
   let mapCode = compiler.compileNode(mapIt, codeEnv)
   if len(node[1][0][2].children) > 0:
     var test = node[1][0][2][0]
-    var filterIt = replaceNode(test, element, PythonNode(kind: PyLabel, label: "it"))
+    var filterIt = replaceNode(test, element, Node(kind: PyLabel, label: "it"))
     let filterCode = compiler.compileNode(filterIt, codeEnv)
     result = call(attribute(call(attribute(sequence, "filterIt"), @[filterCode]), "mapIt"), @[mapCode], seqType(mapCode.typ))
   else:
     result = call(attribute(sequence, "mapIt"), @[mapCode], seqType(mapCode.typ))
   compiler.registerImport("sequtils")
 
-proc compileGeneratorExp(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileGeneratorExp(compiler: var Compiler, node: var Node, env: var Env): Node =
   # for now we'll just close our eyes and send it to our brother to translate it
   result = compiler.compileListComp(node, env)
 
 
-proc compileDictComp(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node =
   # {k: v for k, v in dict.items()}
   #
   # becomes
@@ -811,7 +825,7 @@ proc compileDictComp(compiler: var Compiler, node: var PythonNode, env: var Env)
   #
   # list.mapTable(k:v) # element becomes it 
 
-  var sequence: PythonNode
+  var sequence: Node
   if node[2][0][1].kind == PyCall and node[2][0][1][0].kind == PyAttribute and
      node[2][0][1][0][1].kind == PyStr and node[2][0][1][0][1].s == "items":
     sequence = compiler.compileNode(node[2][0][1][0][0], env)
@@ -825,28 +839,28 @@ proc compileDictComp(compiler: var Compiler, node: var PythonNode, env: var Env)
   var key = node[0]
   var value = node[1]
   var types: Table[string, Type]
-  var keyReplaced: PythonNode
-  var valueReplaced: PythonNode
-  var test: PythonNode
+  var keyReplaced: Node
+  var valueReplaced: Node
+  var test: Node
   if len(node[2][0][2].children) > 0:
     test = node[2][0][2]
 
   if sequence.typ.isList() and element.kind == PyLabel:
     types = {"it": sequence.typ.args[0]}.toTable()
-    keyReplaced = replaceNode(key, element, PythonNode(kind: PyLabel, label: "it"))
-    valueReplaced = replaceNode(value, element, PythonNode(kind: PyLabel, label: "it"))
+    keyReplaced = replaceNode(key, element, Node(kind: PyLabel, label: "it"))
+    valueReplaced = replaceNode(value, element, Node(kind: PyLabel, label: "it"))
     if not test.isNil:
-      test = replaceNode(test, element, PythonNode(kind: PyLabel, label: "it"))
+      test = replaceNode(test, element, Node(kind: PyLabel, label: "it"))
   elif sequence.typ.isDict() and element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
     types = {"k": sequence.typ.args[0], "v": sequence.typ.args[1]}.toTable()
-    keyReplaced = replaceNode(key, element[0], PythonNode(kind: PyLabel, label: "k"))
-    keyReplaced = replaceNode(keyReplaced, element[1], PythonNode(kind: PyLabel, label: "v"))
-    valueReplaced = replaceNode(value, element[0], PythonNode(kind: PyLabel, label: "k"))
-    valueReplaced = replaceNode(value, element[1], PythonNode(kind: PyLabel, label: "v"))
+    keyReplaced = replaceNode(key, element[0], Node(kind: PyLabel, label: "k"))
+    keyReplaced = replaceNode(keyReplaced, element[1], Node(kind: PyLabel, label: "v"))
+    valueReplaced = replaceNode(value, element[0], Node(kind: PyLabel, label: "k"))
+    valueReplaced = replaceNode(value, element[1], Node(kind: PyLabel, label: "v"))
     if not test.isNil:
-      test = replaceNode(test, element[0], PythonNode(kind: PyLabel, label: "k"))
-      test = replaceNode(test, element[1], PythonNode(kind: PyLabel, label: "v"))
-  var base: PythonNode
+      test = replaceNode(test, element[0], Node(kind: PyLabel, label: "k"))
+      test = replaceNode(test, element[1], Node(kind: PyLabel, label: "v"))
+  var base: Node
   var codeEnv = childEnv(env, "<code>", types, nil)
   if test.isNil:
     base = sequence
@@ -856,7 +870,7 @@ proc compileDictComp(compiler: var Compiler, node: var PythonNode, env: var Env)
   let keyCode = compiler.compileNode(keyReplaced, codeEnv)
   let valueCode = compiler.compileNode(valueReplaced, codeEnv)
 
-  result = call(attribute(base, "mapTable"), @[PythonNode(kind: NimExprColonExpr, children: @[keyCode, valueCode])], tableType(keyCode.typ, valueCode.typ))
+  result = call(attribute(base, "mapTable"), @[Node(kind: NimExprColonExpr, children: @[keyCode, valueCode])], tableType(keyCode.typ, valueCode.typ))
   compiler.registerImport("tables")
   compiler.registerImport("py2nim_helpers")
 
@@ -866,13 +880,13 @@ let EXCEPTIONS = {
   "ValueError": "ValueError",
 }.toTable()
 
-proc compileException(compiler: var Compiler, label: string, env: var Env): PythonNode =
+proc compileException(compiler: var Compiler, label: string, env: var Env): Node =
   if EXCEPTIONS.hasKey(label):
-    result = PythonNode(kind: PyLabel, label: EXCEPTIONS[label])
+    result = Node(kind: PyLabel, label: EXCEPTIONS[label])
   else:
-    result = PythonNode(kind: PyLabel, label: label)
+    result = Node(kind: PyLabel, label: label)
 
-proc compileTry(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileTry(compiler: var Compiler, node: var Node, env: var Env): Node =
   # try:
   #   code
   # except E as e:
@@ -888,10 +902,10 @@ proc compileTry(compiler: var Compiler, node: var PythonNode, env: var Env): Pyt
   #   handler
   #
   # TODO finally
-  result = PythonNode(kind: PyTry, children: @[])
+  result = Node(kind: PyTry, children: @[])
   var code = compiler.compileNode(node[0], env)
   result.children.add(code)
-  result.children.add(PythonNode(kind: Sequence, children: @[]))
+  result.children.add(Node(kind: Sequence, children: @[]))
   for handler in node[1]:
     if handler.kind == PyExceptHandler:
       var exception = handler[0]
@@ -902,14 +916,16 @@ proc compileTry(compiler: var Compiler, node: var PythonNode, env: var Env): Pyt
       var e = handler[1]
       var handlerCode = compiler.compileNode(handler[2], env)
       if e.kind == PyStr:
-        handlerCode = replaceNode(handlerCode, PythonNode(kind: PyLabel, label: e.s), call(PythonNode(kind: PyLabel, label: "getCurrentExceptionMsg"), @[], T.String))
-      result[1].children.add(PythonNode(kind: PyExceptHandler, children: @[exception, handlerCode]))
+        handlerCode = replaceNode(handlerCode, Node(kind: PyLabel, label: e.s), call(Node(kind: PyLabel, label: "getCurrentExceptionMsg"), @[], T.String))
+      result[1].children.add(Node(kind: PyExceptHandler, children: @[exception, handlerCode]))
 
-proc compileSubscript(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileSubscript(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[0] = compiler.compileNode(node[0], env)
   node[1] = compiler.compileNode(node[1], env)
   var typ: Type
-  if node[0].typ.isList() and node[1].typ == T.Int:
+  if node[1].kind == PySlice:
+    typ = node[0].typ
+  elif node[0].typ.isList() and node[1].typ == T.Int:
     typ = node[0].typ.args[0]
   elif node[0].typ.isDict() and node[1].typ == node[0].typ.args[0]:
     typ = node[0].typ.args[1]
@@ -931,15 +947,15 @@ proc compileSubscript(compiler: var Compiler, node: var PythonNode, env: var Env
     typ = NIM_ANY
   result = typed(node, typ)
 
-proc compileIndex(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileIndex(compiler: var Compiler, node: var Node, env: var Env): Node =
   if len(node.children) == 1:
     result = compiler.compileNode(node[0], env)
   else:
     warn node
 
-proc compileRaise(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
-  var exception: PythonNode
-  var arg: PythonNode
+proc compileRaise(compiler: var Compiler, node: var Node, env: var Env): Node =
+  var exception: Node
+  var arg: Node
   if node[0].kind == PyCall:
     if node[0][0].kind == PyLabel:
       exception = compiler.compileException(node[0][0].label, env)
@@ -950,11 +966,11 @@ proc compileRaise(compiler: var Compiler, node: var PythonNode, env: var Env): P
     else:
       arg = pyString("")
   else:
-    exception = PythonNode(kind: PyLabel, label: "Exception")
+    exception = Node(kind: PyLabel, label: "Exception")
     arg = node[0]
-  result = PythonNode(kind: PyRaise, children: @[call(PythonNode(kind: PyLabel, label: "newException"), @[exception, arg], T.Void)], typ: T.Void)
+  result = Node(kind: PyRaise, children: @[call(Node(kind: PyLabel, label: "newException"), @[exception, arg], T.Void)], typ: T.Void)
 
-proc compileAugAssign(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileAugAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
   var operator = case node[1].kind:
     of PyAdd: "+="
     of PySub: "-="
@@ -964,22 +980,22 @@ proc compileAugAssign(compiler: var Compiler, node: var PythonNode, env: var Env
   var left = compiler.compileNode(node[0], env)
   var right = compiler.compileNode(node[2], env)
   if operator[^1] != '=':
-    result = assign(left, binop(left, PythonNode(kind: PyLabel, label: operator), right))
+    result = assign(left, binop(left, Node(kind: PyLabel, label: operator), right))
   else:
-    result = PythonNode(kind: NimInfix, children: @[PythonNode(kind: PyLabel, label: operator), left, right], typ: T.Void)
+    result = Node(kind: NimInfix, children: @[Node(kind: PyLabel, label: operator), left, right], typ: T.Void)
 
-proc compileBytes(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileBytes(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.Bytes)
 
-proc compileYield(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileYield(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[0] = compiler.compileNode(node[0], env)
   result = node
   env.hasYield = true
 
-proc compileBreak(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileBreak(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
 
-proc parseOp(node: PythonNode): string =
+proc parseOp(node: Node): string =
   case node.kind:
   of PyLabel:
     result = node.label
@@ -990,7 +1006,7 @@ proc parseOp(node: PythonNode): string =
   else:
     result = $node.kind
 
-proc compileBoolOp(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileBoolOp(compiler: var Compiler, node: var Node, env: var Env): Node =
   var z = 0
   for child in node[1].mitems:
     child = compiler.compileNode(child, env)
@@ -1003,15 +1019,51 @@ proc compileBoolOp(compiler: var Compiler, node: var PythonNode, env: var Env): 
     var right = node[1][z]
     result = binop(result, operator(label), right, typ=T.Bool)
 
-proc compileTuple(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileTuple(compiler: var Compiler, node: var Node, env: var Env): Node =
   for z, child in node.nitems:
     node[z] = compiler.compileNode(child, env)
   node.typ = Type(kind: N.Tuple, elements: node.children.mapIt(it.typ))
   result = node
 
-proc compileNode*(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc compileSlice(compiler: var Compiler, node: var Node, env: var Env): Node =
+  # a[start:finish]
+  #
+  # becomes
+  #
+  # a[start ..< finish]
+  #
+  # a[start:]
+  #
+  # becomes
+  #
+  # a[start .. ^1]
+  #
+  # a[:finish]
+  #
+  # becomes
+  #
+  # a[0 ..< finish]
+  #
+  # -index becomes ^index
+  var start = compiler.compileNode(node[0], env)
+  var finish = compiler.compileNode(node[1], env)
+  var a = "..<"
+  if start == PY_NIL:
+    start = pyInt(0)
+  elif start.kind == PyInt and start.i < 0:
+    start = Node(kind: NimPrefix, children: @[label("^"), start])
+  
+  if finish == PY_NIL:
+    a = ".."
+    finish = Node(kind: NimPrefix, children: @[label("^"), pyInt(1)])
+  elif finish.kind == PyInt and finish.i < 0:
+    finish = Node(kind: NimPrefix, children: @[label("^"), finish])
+
+  result = Node(kind: NimInfix, children: @[label(a), start, finish])
+
+proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
-  # echo fmt"compile {node.kind}"
+  echo fmt"compile {node.kind}"
   try:
     if node.ready:
       result = node
@@ -1095,6 +1147,8 @@ proc compileNode*(compiler: var Compiler, node: var PythonNode, env: var Env): P
       result = compiler.compileBoolOp(node, env)
     of PyTuple:
       result = compiler.compileTuple(node, env)
+    of PySlice:
+      result = compiler.compileSlice(node, env)
     else:
       result = PY_NIL
       warn($node.kind)
@@ -1117,7 +1171,7 @@ proc loadNamespace*(compiler: Compiler, path: string): string =
   var t = tokens.join(".")[0..^4]
   return fmt"{compiler.db.package}{t}"
 
-proc mergeFunctionTypeInfo(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc mergeFunctionTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node.kind == PyFunctionDef
 
   var f = node.children[0]
@@ -1147,7 +1201,7 @@ proc mergeFunctionTypeInfo(compiler: var Compiler, node: var PythonNode, env: va
   result = node
   result.typ = typ
 
-proc mergeClassTypeInfo(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc mergeClassTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node[0].kind == PyStr
   let label = node[0].s
   let fullName = fmt"{compiler.currentModule}.{label}"
@@ -1165,10 +1219,10 @@ proc mergeClassTypeInfo(compiler: var Compiler, node: var PythonNode, env: var E
   result = node
   result.typ = typ
 
-proc mergeCallTypeInfo(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc mergeCallTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
 
-proc mergeModuleTypeInfo(compiler: var Compiler, node: var PythonNode, env: var Env): PythonNode =
+proc mergeModuleTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node =
   # loads aliases , functions and classes
   if node.isNil:
     return
@@ -1222,7 +1276,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
       compiler.generated[path] = generator.generate(module)
 
 when false:
-  proc compileToAst*(source: string): PythonNode =
+  proc compileToAst*(source: string): Node =
     var compiler = Compiler()
     var (types, sysPath) = traceTemp("temp.py", source)
     var node = loadAst("temp.py")

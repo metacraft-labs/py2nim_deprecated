@@ -1,20 +1,20 @@
 # py2nim
 
-A Python to Nim compiler. 
+A Python to Nim transpiler.
 
 * generation of idiomatic Nim code
 * automating some of the work involved in porting Python libraries
 
 The project is still under active development and many Python patterns/constructs can't be translated yet.
 
-## Install
+## Installation
 
 Currently py2nim is mostly useful in development mode, so there are no prebuilt packages yet
 
 You need to setup
 
-* the devel version of Nim: you can follow the steps in https://github.com/nim-lang/nim/
-* a working Python environment
+* The devel version of Nim. Please clone the [Nim repository](https://github.com/nim-lang/nim/) in a directory placed next to py2nim.
+* A working Python environment
 
 Install py2nim with
 
@@ -25,35 +25,37 @@ Install py2nim with
   git submodule update --init --recursive
   ```
 
-* 
+*
    ```bash
    cd python-deduckt
    pip install -r requirements.txt
    ```
 
 * Build with
-    
+
    ```bash
    nim c py2nim.nim
    ```
 
 Now you should have a `py2nim` binary
 
-## Command options
+## Usage
 
 ```bash
-./py2nim fullpath_testfile.py [-o:outputfolder]
+./py2nim example/fib.py
 ```
 
 Usually you want to run it on a python module that invokes tests or other code.
-Tests are often a good fit, as their run invokes most of the useful code in the Python project.
-If you have a way to provide a run with maximally real-world like usage (eg integration tests),
-use that.
+Tests are often a good fit, as their execution should invoke most of the useful
+code in the translated project. Since many tests may involve the use of mocked
+instances and types, it's preferrable to select tests that are closer to the
+real-world usage of the code (e.g. integration tests).
 
-Currently there is still no way to combine the results of several different runs, but this ability
-should be available soon.
+Currently there is still no way to combine the results of several different runs,
+but this capability will be available soon.
 
-The output is in an `output` directory by default. You can specify another one with `-o:`
+The output is in an `output` directory by default.
+You can specify another one with `-o:`
 
 ## Limitations
 
@@ -66,18 +68,19 @@ When py2nim encounters code that cannot be translated, it will insert the follow
 
 (currently only the warn message is produced)
 
-It is limited to the translation of one package at a time: it assumes that any foreign import-s would be
-either of libraries about which it will have internal mappings(in the future, providable by an user) or
-libraries that the user will port himself.
+py2nim is currently limited to the translation of one package at a time. We assume
+that any foreign imports would be either libraries for which there will be internal
+mappings or libraries that will be translated separately.
 
-We have tested mostly with versions of Python3, but py2nim seems to work fine with Python2.7 too.
+We have tested mostly with versions of Python3, but py2nim seems to work fine with
+Python2.7 too.
 
 ## Implementation
 
-py2nim infers types of Python functions with [our python-deduckt library](https://github.com/metacraft-labs/python-deduckt)
+py2nim infers the types of all Python functions with [our python-deduckt library](https://github.com/metacraft-labs/python-deduckt)
 After that it applies further type inference on the AST based on knowledge about Python semantics.
-It detects some typical Python patterns and constructs and translated them to idiomatic Nim equivalents.
-It has also internal mappings of some of the standard library methods to Nim idioms.
+It detects some typical Python patterns and constructs and translates them to idiomatic Nim equivalents.
+It also has internal mappings of some of the standard library methods to Nim idioms.
 Finally it produces `PNode`-s and reuses the compiler's `renderer.nim` to generate code.
 
 ## What kind of transformations is py2nim capable of?

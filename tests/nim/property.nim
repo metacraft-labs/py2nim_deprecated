@@ -1,5 +1,5 @@
 type
-  A* = object of RootObj
+  A* = object
     a*: int
 
 proc z*(self: A): int =

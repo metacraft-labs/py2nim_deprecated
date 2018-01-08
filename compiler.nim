@@ -1071,7 +1071,7 @@ proc compileSlice(compiler: var Compiler, node: var Node, env: var Env): Node =
 
 proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
-  echo fmt"compile {node.kind}"
+  # echo fmt"compile {node.kind}"
   try:
     if node.ready:
       result = node

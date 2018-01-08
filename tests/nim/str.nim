@@ -1,5 +1,5 @@
 type
-  A* = object of RootObj
+  A* = object
 proc `$`*(self: A): string =
   return "a"
 

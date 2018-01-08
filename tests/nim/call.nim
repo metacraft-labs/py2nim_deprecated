@@ -1,6 +1,6 @@
 type
-  A* = object of RootObj
-method `()`*(self: A; a: int): void =
+  A* = object
+proc `()`*(self: A; a: int): void =
   echo a
 
 var a = A()

@@ -1,6 +1,6 @@
 
 type
-  A* = object of RootObj
+  A* = object
     a*: int
 
 proc makeA*(): A =

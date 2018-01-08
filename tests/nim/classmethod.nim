@@ -1,5 +1,5 @@
 type
-  A* = object of RootObj
+  A* = object
 proc z*(cls: typedesc; a: int): int =
   return a
 

@@ -2,7 +2,7 @@ import
   algorithm
 
 type
-  A* = object of RootObj
+  A* = object
     values*: seq[int]
     z*: int
 

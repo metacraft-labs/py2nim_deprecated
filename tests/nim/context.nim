@@ -4,14 +4,14 @@ import
 type
   VMError* = object of Exception
 type
-  A* = object of RootObj
+  A* = object
     a*: int
 
-method enter*(self: var A): void =
+proc enter*(self: var A): void =
   self.a = 2
 
-method exit*(self: var A; exc_type: ref Exception; exc_value: ref Exception;
-            traceback: string): void =
+proc exit*(self: var A; exc_type: ref Exception; exc_value: ref Exception;
+          traceback: string): void =
   if not exc_value.isNil() and exc_value of VMError:
     echo "ERROR"
   else:

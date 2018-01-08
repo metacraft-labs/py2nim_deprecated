@@ -437,7 +437,7 @@ proc generatePrefix(generator: var Generator, node: Node): PNode =
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
-  log fmt"generate {node.kind}"
+  # log fmt"generate {node.kind}"
   case node.kind:
   of PyAssign:
     result = generator.generateAssign(node)

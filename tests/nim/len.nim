@@ -1,6 +1,6 @@
 
 type
-  A* = object of RootObj
+  A* = object
     elements*: seq[int]
 
 proc len*(self: A): int =

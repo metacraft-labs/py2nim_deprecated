@@ -105,7 +105,9 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
 
   var maybeGeneric = initTable[string, (Node, bool, Table[string, Type])]()
   for function in functions:
-    if not maybeGeneric.hasKey(function[0].s):
+    if function[0].kind != PyStr:
+      continue
+    elif not maybeGeneric.hasKey(function[0].s):
       maybeGeneric[function[0].s] = (function, false, initTable[string, Type]())
     else:
       var (equivalent, genericMap) = genericCompatible(maybeGeneric[function[0].s][0], function)

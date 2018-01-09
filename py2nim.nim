@@ -3,7 +3,7 @@ import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
   echo "py2nim [-o --output <outputdir>] [-a --ast] [-h --help] <test.py> args"
-  quit(0)
+  quit(1)
 
 proc save(compiler: Compiler, output: string, untilPass: Pass) =
   discard existsOrCreateDir(output)
@@ -31,7 +31,13 @@ proc translate =
     else:
       inPython = true
       pythonArgs.add(arg)
-  pythonArgs[0] = expandFilename(pythonArgs[0])
+  if len(pythonArgs) == 0:
+    writeHelp()
+  try:
+    pythonArgs[0] = expandFilename(pythonArgs[0])
+  except OSError:
+    echo getCurrentExceptionMsg()
+    quit(1)
   command = pythonArgs.join(" ")
   var parser = initOptParser(nimArgs.join(" "))
   for kind, key, arg in parser.getopt():

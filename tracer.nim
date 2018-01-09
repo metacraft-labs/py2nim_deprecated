@@ -59,15 +59,10 @@ proc importType*(typ: JsonNode): PyType =
 
 proc tracePython*(command: string) =
   echo fmt"python3 python-deduckt/deduckt/main.py {command}"
-  var res = execProcess(fmt"python3 python-deduckt/deduckt/main.py {command}")
-  # let types = parseJson(readFile("types.json"))
-  # result[0] = initTable[string, PyType]()
-  # result[1] = @[]
-  # for label, child in types:
-  #   if label != "@path":
-  #     result[0][label] = importType(child)
-  #   else:
-  #     result[1] = child.mapIt(($it)[1..^2])
+  var res = execCmd(fmt"python3 python-deduckt/deduckt/main.py {command}")
+  if res != 0:
+    echo "python-deduckt problem"
+    quit(1)
 
 proc traceTemp*(path: string, source: string): (Table[string, PyType], seq[string]) =
   let newSource = source.splitLines().mapIt(fmt"  {it}").join("\n")

@@ -1305,7 +1305,7 @@ proc compileIn(compiler: var Compiler, node: var Node, env: var Env): Node =
 
 proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
-  echo fmt"{repeat(' ', compiler.depth)}compile {node.kind}"
+  # echo fmt"{repeat(' ', compiler.depth)}compile {node.kind}"
   try:
     if node.ready:
       result = node

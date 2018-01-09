@@ -58,8 +58,8 @@ proc importType*(typ: JsonNode): PyType =
     result.label = ($typ{"label"})[1..^2]
 
 proc tracePython*(command: string) =
-  echo fmt"python3 python-deduckt/deduckt/main.py {command}"
-  var res = execCmd(fmt"python3 python-deduckt/deduckt/main.py {command}")
+  # echo fmt"python3 python-deduckt/deduckt/main.py {command}"
+  var res = execCmd(fmt"python3 python-deduckt/deduckt/main.py {command} > /dev/null")
   if res != 0:
     echo "python-deduckt problem"
     quit(1)

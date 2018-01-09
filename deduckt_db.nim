@@ -36,7 +36,7 @@ proc load*(dbfile: string): DeducktDb =
 
 proc loadAst*(db: DeducktDb, filename: string): Node =
   # XXX: Perhaps, this could be cached
-  echo filename
+  # echo filename
   result = importAst(db.root[filename]["ast"])
 
 proc startPath*(db: DeducktDb): string =

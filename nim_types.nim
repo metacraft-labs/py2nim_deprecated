@@ -106,7 +106,6 @@ proc dump*(t: Type, depth: int): string =
         var members = ""
         for label, member in t.members:
           members.add("$1$2: $3\n" % [repeat("  ", depth + 1), label, dump(member, 0)])
-        echo t.label
         "$1:\n$2" % [t.label, members]
       of N.Tuple:
         let elements = t.elements.mapIt(dump(it, 0)).join(", ")

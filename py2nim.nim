@@ -26,7 +26,8 @@ proc save(compiler: Compiler, output: string, untilPass: Pass) =
           var exit = execCmd(fmt"mkdir -p {output}/{folder}/")
           if exit != 0:
             echo fmt"can't create {folder}"
-        success(fmt"compiled to Nim: {output}/{folder}/{filename}.nim")
+        var expanded = expandFilename(fmt"{output}/{folder}/") & fmt"/{filename}.nim"
+        success(fmt"compiled to Nim: {expanded}")
         writeFile(fmt"{output}/{folder}/{filename}.nim", generated)
 
 proc translate =

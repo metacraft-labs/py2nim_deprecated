@@ -425,6 +425,12 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   elif label == "__setitem__":
     label = "[]="
     node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
+  elif label == "__contains__":
+    label = "contains"
+    node[0].s = label
+  elif label == "__delitem__":
+    label = "del"
+    node[0].s = label
   elif label == "__iter__":
     if len(node[2].children) != 1 or not node[2][0].testEq(Node(kind: PyReturn, children: @[Node(kind: PyLabel, label: "self")])):
       warn("def __iter__(self): return self only supported")
@@ -1135,6 +1141,13 @@ proc compileSlice(compiler: var Compiler, node: var Node, env: var Env): Node =
 
   result = Node(kind: NimInfix, children: @[label(a), start, finish])
 
+proc compileDelete(compiler: var Compiler, node: var Node, env: var Env): Node =
+  if node[0].kind != PySubscript:
+    return node
+  var sequence = compiler.compileNode(node[0][0], env)
+  var element = compiler.compileNode(node[0][1], env)
+  result = call(Node(kind: PyLabel, label: "del"), @[sequence, element], T.Void)
+
 proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
   # echo fmt"compile {node.kind}"
@@ -1223,6 +1236,8 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
       result = compiler.compileTuple(node, env)
     of PySlice:
       result = compiler.compileSlice(node, env)
+    of PyDelete:
+      result = compiler.compileDelete(node, env)
     else:
       result = PY_NIL
       warn($node.kind)

@@ -435,6 +435,11 @@ proc generateTuple(generator: var Generator, node: Node): PNode =
 proc generatePrefix(generator: var Generator, node: Node): PNode =
   result = nkPrefix.newTree(emitNode(node[0]), emitNode(node[1]))
 
+proc generateImport(generator: var Generator, node: Node): PNode =
+  result = nkImportStmt.newTree()
+  for child in node:
+    result.add(emitNode(child))
+
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
@@ -514,6 +519,8 @@ proc generateNode(generator: var Generator, node: Node): PNode =
     result = generator.generateTuple(node)
   of NimPrefix:
     result = generator.generatePrefix(node)
+  of PyImport:
+    result = generator.generateImport(node)
   else:
     echo "?", node.kind
     result = emptyNode
@@ -536,8 +543,8 @@ proc generate*(generator: var Generator, module: Module): string =
       for index, previous in module.functions:
         if index >= z:
           break
-        echo previous.calls.isValid()
-        if previous.calls.isValid() and previous.calls.contains(function.typ.label):
+        # echo function.typ
+        if previous.calls.contains(function.typ.label):
           forward.add(function)
 
   for function in forward:

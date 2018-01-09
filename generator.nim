@@ -275,7 +275,6 @@ proc generateSequence(generator: var Generator, node: Node): PNode =
     while z < len(node.children) - 1 and not node[z + 1].isNil and
           child.kind == PyAssign and node[z + 1].kind == PyAssign and
           child.declaration != Declaration.Existing and child.declaration == node[z + 1].declaration:
-      echo node[z]
       group.add(node[z])
       z += 1
     if len(group) > 0:
@@ -353,7 +352,7 @@ let SYMBOLS* = {
 }.toTable()
 
 proc generateOp(generator: var Generator, op: Node): PNode =
-  echo op
+  # echo op
   let s = if SYMBOLS.hasKey(op.kind): SYMBOLS[op.kind] else: op.label
   result = generateIdent(s)
 

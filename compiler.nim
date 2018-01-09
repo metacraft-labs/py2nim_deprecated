@@ -187,7 +187,6 @@ proc compileAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
     var label = node[0][0].label
     node[1] = value
     if not env.types.hasKey(label):
-      echo compiler.path
       if compiler.path.endsWith("constants.py"): 
         # weird?
         # most libraries I test have it

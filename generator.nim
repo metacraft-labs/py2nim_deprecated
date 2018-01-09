@@ -2,17 +2,18 @@ import
   strformat, strutils, sequtils, tables, sets,
   module, python_ast, helpers, core,
   compiler/[ast, astalgo, idents, msgs, renderer],
-  nim_types, terminal
+  nim_types, terminal, macros
 
 
 type
   NimVersion* {.pure.} = enum V017, Development
 
   Generator* = object
-    indent*:    int
-    v*:         NimVersion
-    module*:    Module
-    res*:       PNode
+    indent*:               int
+    v*:                    NimVersion
+    module*:               Module
+    identifierCollisions*: HashSet[string]
+    res*:                  PNode
 
 
 
@@ -32,8 +33,13 @@ let endl = "\n"
 
 let nilNode = nkNilLit.newTree()
 
-proc generateIdent(s: string): PNode =
-  result = newIdentNode(PIdent(s: s), TLineInfo())
+macro generateIdent(s: untyped): untyped =
+  result = quote:
+    newIdentNode(PIdent(s: translateIdentifier(`s`, generator.identifierCollisions)), TLineInfo())
+
+macro generateDirectIdent(s: untyped): untyped =
+  result = quote:
+    newIdentNode(PIdent(s: `s`), TLineInfo())
 
 proc generateNode(generator: var Generator, node: Node): PNode
 
@@ -47,7 +53,7 @@ proc generateImports(generator: var Generator, imp: seq[Node]): PNode =
   var labels: seq[PNode] = @[]
   var aliases: seq[Node] = @[]
   for child in imp:
-    labels = labels.concat(child.children.mapIt(generator.generateNode(it)))
+    labels = labels.concat(child.children.mapIt(generateDirectIdent(it.label)))
     aliases = aliases.concat(child.aliases)
   let top = nkImportStmt.newTree(labels)
   if len(aliases) > 0:
@@ -212,8 +218,6 @@ proc generateAssign(generator: var Generator, node: Node): PNode =
     result = nkAsgn.newTree(name, value)
 
 proc generateLabel(generator: var Generator, node: Node): PNode =
-  ensure(PyLabel)
-
   result = generateIdent(node.label)
 
 proc generateIf(generator: var Generator, node: Node): PNode =
@@ -322,7 +326,6 @@ let SYMBOLS* = {
 }.toTable()
 
 proc generateOp(generator: var Generator, op: Node): PNode =
-  # echo op
   let s = if SYMBOLS.hasKey(op.kind): SYMBOLS[op.kind] else: op.label
   result = generateIdent(s)
 
@@ -597,7 +600,6 @@ proc generate*(generator: var Generator, module: Module): string =
       for index, previous in module.functions:
         if index >= z:
           break
-        # echo function.typ
         if isValid(previous.calls) and previous.calls.contains(function.typ.label):
           forward.add(function)
 

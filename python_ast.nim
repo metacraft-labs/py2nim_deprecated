@@ -192,3 +192,17 @@ proc deepCopy*(a: Node): Node =
   for child in a.children:
     result.children.add(deepCopy(child))
 
+proc camelCase*(label: string): string =
+  let tokens = label.split("_")
+  result = tokens[0] & tokens[1..^1].mapIt(capitalizeAscii(it)).join("")
+
+proc translateIdentifier*(label: string): string =
+  result = camelCase(label)
+
+proc translateIdentifier*(label: string, identifierCollisions: HashSet[string]): string =
+  var translated = translateIdentifier(label)
+  if translated notin identifierCollisions:
+    return translated
+  else:
+    return label
+

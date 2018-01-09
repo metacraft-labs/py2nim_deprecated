@@ -23,6 +23,9 @@ type
     currentFunction*: string
     currentCalls*: HashSet[string]
     base*: string
+    identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision) 
+                                                          # if there is already a different existing identifier 
+                                                          # for that idiomatic one, toggle collision to true
 
 proc newCompiler*(db: DeducktDb, command: string): Compiler =
   result = Compiler(db: db, command: command)
@@ -46,6 +49,8 @@ proc replaceNode(node: Node, original: Node, newNode: Node): Node
 proc registerImport(compiler: var Compiler, label: string)
 
 proc compileDocstring(compiler: var Compiler, node: Node, env: var Env): seq[string]
+
+proc monitorCollisions(compiler: var Compiler, label: string)
 
 proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
@@ -177,6 +182,7 @@ proc compileAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
     if not env.types.hasKey(label):
       node.declaration = Declaration.Var
     env[label] = value.typ
+    compiler.monitorCollisions(label)
   elif node[0][0].kind == PySubscript:
     node[0][0] = compiler.compileNode(node[0][0], env)
     node[1] = value
@@ -297,7 +303,14 @@ proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
   if compiler.currentCalls.isValid() and function.kind == PyLabel:
     compiler.currentCalls.incl(function.label)
 
-proc compileLabel*(compiler: var Compiler, node: var Node, env: var Env): Node =
+proc monitorCollisions(compiler: var Compiler, label: string) =
+  var translated = translateIdentifier(label)
+  if not compiler.identifierCollisions.hasKey(translated):
+    compiler.identifierCollisions[translated] = (label, false)
+  elif compiler.identifierCollisions[translated][0] != label:
+    compiler.identifierCollisions[translated] = (label, true)
+
+proc compileLabel(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node.kind == PyLabel
   if node.label in SPECIAL_FUNCTIONS:
     result = node
@@ -310,6 +323,8 @@ proc compileLabel*(compiler: var Compiler, node: var Node, env: var Env): Node =
     if typ.isNil:
       typ = env.get(fmt"{compiler.currentModule}.{node.label}")
     result = typed(node, typ)
+
+  compiler.monitorCollisions(node.label)
 
 proc compileStr(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = typed(node, T.String)
@@ -409,6 +424,8 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   assert f.kind == PyStr # TODO: label
   var label = f.s
 
+  compiler.monitorCollisions(label)
+
   node.calls = initSet[string]()
   let typ = if fTyp.isNil: env.get(label) else: fTyp
   if typ.isNil or typ.kind notin {N.Overloads, N.Function}:
@@ -494,6 +511,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     assert v.kind == Pyarg and v[0].kind == PyStr
     args[v[0].s] = typ.functionArgs[z]
     z += 1
+    compiler.monitorCollisions(v[0].s)
 
   var functionEnv = childEnv(env, label, args, typ.returnType)
   compiler.currentFunction = typ.fullLabel
@@ -670,6 +688,8 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
   var typ = env[label]
   compiler.currentClass = typ
   compiler.currentClass.init = ""
+
+  compiler.monitorCollisions(label)
 
   var children = node[3].children
   if len(node.children) > 5:
@@ -861,6 +881,7 @@ proc registerImport(compiler: var Compiler, label: string) =
       return
 
   compiler.modules[compiler.path].imports.add(Node(kind: PyImport, children: @[Node(kind: PyLabel, label: label)], aliases: @[]))
+  compiler.monitorCollisions(label)
 
 proc compileDict(compiler: var Compiler, node: var Node, env: var Env): Node =
   if len(node[0].children) > 0:
@@ -1399,6 +1420,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
   compiler.modules = initTable[string, Module]()
   compiler.generated = initTable[string, string]()
   compiler.base = firstPath.rsplit("/", 1)[0]
+  compiler.identifierCollisions = initTable[string, (string, bool)]()
   # while len(compiler.maybeModules) > 0:
   for z, path in compiler.db.modules:
     if path.startsWith(compiler.db.projectDir): # and "codec" in path:
@@ -1420,7 +1442,11 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
         echo getCurrentExceptionMsg()
         raise getCurrentException()
   if untilPass == Pass.Generation:
-    var generator = Generator(indent: 2, v: generator.NimVersion.Development)
+    var identifierCollisions = initSet[string]()
+    for label, collision in compiler.identifierCollisions:
+      if collision[1]:
+        identifierCollisions.incl(label)
+    var generator = Generator(indent: 2, v: generator.NimVersion.Development, identifierCollisions: identifierCollisions)
     for path, module in compiler.modules:
       compiler.generated[path] = generator.generate(module)
 

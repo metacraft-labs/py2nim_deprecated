@@ -10,9 +10,8 @@ type
 proc enter*(self: var A): void =
   self.a = 2
 
-proc exit*(self: var A; exc_type: ref Exception; exc_value: ref Exception;
-          traceback: string): void =
-  if notexc_value.isNil() and exc_value of VMError:
+proc exit*(self: var A; excType: ref Exception; excValue: ref Exception; traceback: string): void =
+  if notexcValue.isNil() and excValue of VMError:
     echo "ERROR"
   else:
     self.a = -2

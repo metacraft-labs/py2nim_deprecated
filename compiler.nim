@@ -1412,7 +1412,7 @@ proc mergeModuleTypeInfo(compiler: var Compiler, node: var Node, env: var Env): 
       z += 1
     result = node
 
-proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
+proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyModule: string = "") =
   var firstPath = compiler.db.startPath()
   var node = compiler.db.loadAst(firstPath)
   compiler.maybeModules = {firstPath: true}.toTable()
@@ -1423,7 +1423,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
   compiler.identifierCollisions = initTable[string, (string, bool)]()
   # while len(compiler.maybeModules) > 0:
   for z, path in compiler.db.modules:
-    if path.startsWith(compiler.db.projectDir): # and "codec" in path:
+    if path.startsWith(compiler.db.projectDir) and path.endsWith(onlyModule): # and "codec" in path:
     # for path, maybe in compiler.maybeModules:
       try:
         if not compiler.modules.hasKey(path):

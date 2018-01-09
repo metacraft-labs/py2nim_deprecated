@@ -19,7 +19,7 @@ py2nim -o:a ~/a/test.py
 py2nim -n -o:a ~/a/test.py
 # starts based on the current python-deduckt.json
 
-py2nim -m:a.py ~/a/test.py
+py2nim -m:a ~/a/test.py
 # translates only a.py
 """
 
@@ -58,9 +58,10 @@ proc translate =
   var pythonArgs: seq[string] = @[]
   var inPython = false
   var noTrace = false
+  var onlyModule = ""
   for z in 1..paramCount():
     var arg = paramStr(z)
-    if not inPython and not arg.endsWith(".py"):
+    if not inPython and not (":" notin arg and arg.endsWith(".py")):
       nimArgs.add(arg)
     else:
       inPython = true
@@ -81,6 +82,7 @@ proc translate =
       of "output", "o": output = arg
       of "ast", "a": untilPass = Pass.AST
       of "no-trace", "n": noTrace = true
+      of "module", "m": onlyModule = arg
       of "help", "h": writeHelp()
     else:
       discard
@@ -88,6 +90,8 @@ proc translate =
   if command == "":
     writeHelp()
 
+  if not onlyModule.endsWith(".py"):
+    onlyModule = fmt"{onlyModule}.py"
 
   # trace it and collect types
   if not noTrace:
@@ -99,7 +103,7 @@ proc translate =
 
   # convert to idiomatic nim
   var compiler = newCompiler(db, command)
-  compiler.compile(untilPass)
+  compiler.compile(untilPass, onlyModule)
 
   save(compiler, output, untilPass)
   

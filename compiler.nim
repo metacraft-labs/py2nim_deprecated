@@ -45,7 +45,7 @@ proc replaceNode(node: Node, original: Node, newNode: Node): Node
 
 proc registerImport(compiler: var Compiler, label: string)
 
-proc compileDocstring(compiler: var Compiler, node: var Node, env: var Env): seq[string]
+proc compileDocstring(compiler: var Compiler, node: Node, env: var Env): seq[string]
 
 proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
@@ -518,7 +518,13 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     result = typed(node, typ)
   if not compiler.currentClass.isNil and (not compiler.currentClass.base.isNil or compiler.currentClass.inherited):
     result.isMethod = true
-  result.doc = compiler.compileDocstring(node[5], env)
+  if len(node.children) > 5:
+    result.doc = compiler.compileDocstring(node[5], env)
+  elif len(result[2].children) > 0 and result[2][0].kind == PyStr:
+    result.doc = compiler.compileDocstring(result[2][0], env)
+    result[2].children = result[2].children[1..^1]
+  else:
+    result.doc = @[]
 
 proc compileAttribute*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
@@ -636,7 +642,7 @@ proc createInit(compiler: var Compiler, assignments: seq[Node]): Node =
       PY_NIL])
   result.typ = Type(kind: N.Function, label: compiler.currentClass.init, functionArgs: @[], returnType: compiler.currentClass)
 
-proc compileDocstring(compiler: var Compiler, node: var Node, env: var Env): seq[string] =
+proc compileDocstring(compiler: var Compiler, node: Node, env: var Env): seq[string] =
   if node.kind != PyStr:
     result = @[]
   else:
@@ -665,7 +671,14 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
   compiler.currentClass = typ
   compiler.currentClass.init = ""
 
-  node.docstring = compiler.compileDocstring(node[5], env)
+  var children = node[3].children
+  if len(node.children) > 5:
+    node.docstring = compiler.compileDocstring(node[5], env)
+  elif len(children) > 0 and children[0].kind == PyExpr and children[0][0].kind == PyStr:
+    node.docstring = compiler.compileDocstring(children[0][0], env)
+    children = children[1..^1]
+  else:
+    node.docstring = @[]
   node[0] = Node(kind: PyLabel, label: label)
 
   if node[1].kind == Sequence and len(node[1].children) > 0:
@@ -676,16 +689,16 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
 
   result = node
 
-  if len(node[3].children) > 0:
+  if len(children) > 0:
     result = Node(kind: Sequence, children: @[result])
 
     var classEnv = childEnv(env, label, initTable[string, Type](), nil)
 
     var z = 0
     var assignments: seq[Node] = @[]
-    for child in node[3].mitems:
+    for child in children.mitems:
       if child.kind == PyFunctionDef:
-        node[3][z] = compiler.mergeFunctionTypeInfo(child, classEnv)
+        children[z] = compiler.mergeFunctionTypeInfo(child, classEnv)
       elif child.kind == PyAssign and len(child[0].children) == 1 and child[0][0].kind == PyLabel:
         var value = compiler.compileNode(child[1], classEnv)
         assignments.add(assign(attribute(Node(kind: PyLabel, label: "result"), child[0][0].label), value))
@@ -695,7 +708,7 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
 
     z = 0
     var hasInit = false
-    for child in node[3].mitems:
+    for child in children.mitems:
       if child.kind == PyFunctionDef:
         if child[0].kind == PyLabel and child[0].label == "__init__":
           hasInit = true
@@ -1288,7 +1301,7 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   except Exception:
     warn(fmt"compile {getCurrentExceptionMsg()}")
     result = PY_NIL
-    # raise getCurrentException()
+    raise getCurrentException()
   if result.typ.isNil:
     result.typ = NIM_ANY
 
@@ -1405,7 +1418,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
           compiler.compileAst(path)
       except Exception:
         echo getCurrentExceptionMsg()
-        # raise getCurrentException()
+        raise getCurrentException()
   if untilPass == Pass.Generation:
     var generator = Generator(indent: 2, v: generator.NimVersion.Development)
     for path, module in compiler.modules:

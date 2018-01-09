@@ -252,12 +252,38 @@ proc generateWhen(generator: var Generator, node: Node): PNode =
   if not node[2].isNil and len(node[2].children) > 0:
     result[0].add(nkElse.newTree(emitNode(node[2])))
 
+proc generateGroup(generator: var Generator, group: seq[Node]): PNode =
+  assert group[0].kind == PyAssign
+  result = case group[0].declaration:
+    of Declaration.Var: nkVarSection.newTree()
+    of Declaration.Let: nkLetSection.newTree()
+    of Declaration.Const: nkConstSection.newTree()
+    else: nkStmtList.newTree()
+  for element in group:
+    var e = element
+    e.declaration = Declaration.Existing
+    result.add(emitNode(e))
+
 proc generateSequence(generator: var Generator, node: Node): PNode =
   ensure(Sequence)
 
   result = nkStmtList.newTree()
-  for child in node.children:
-    result.add(emitNode(child))
+  var z = 0
+  while z < len(node.children):
+    var child = node[z]
+    var group: seq[Node] = @[]
+    while z < len(node.children) - 1 and not node[z + 1].isNil and
+          child.kind == PyAssign and node[z + 1].kind == PyAssign and
+          child.declaration != Declaration.Existing and child.declaration == node[z + 1].declaration:
+      echo node[z]
+      group.add(node[z])
+      z += 1
+    if len(group) > 0:
+      group.add(node[z])
+      result.add(generator.generateGroup(group))
+    else:
+      result.add(emitNode(child))
+    z += 1
 
 proc generateCall(generator: var Generator, node: Node): PNode =
   ensure(PyCall)
@@ -614,9 +640,12 @@ proc generate*(generator: var Generator, module: Module): string =
   for function in module.functions:
     generator.res.add(generator.generateFunction(function))
 
+  var init: seq[Node] = @[]
   for i in module.init:
     if i.kind != PyNone:
-      generator.res.add(generator.generateNode(i))
+      init.add(i)
+
+  generator.res.add(emitNode(Node(kind: Sequence, children: init)))
 
   result = generator.res.renderTree({renderDocComments}) & "\n"
   if result.startsWith("  "):

@@ -97,7 +97,6 @@ proc markIdiomatic*(node: var Node) =
 
 proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): (Node, seq[string]) =
   var imports: seq[string] = @[]
-  # echo requiredDependencies
   var newNode = case idiom.kind:
     of IType:
       node.typ = idiom.typ
@@ -108,7 +107,8 @@ proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): (Node
       node
     of IAST:
       idiom.handler(if len(children) > 0: children else: node.children)
-  # newNode.markIdiomatic()
+  if node.kind == PyBinOp and node[1].kind == PyPow:
+    imports.add("math")
   result = (newNode, imports)
 
 proc initName(node: NimNode): (string, seq[Type]) =
@@ -282,7 +282,6 @@ proc generateBuiltin*(u: NimNode, children: NimNode): NimNode =
                 Node(kind: PyLabel, label: `nimName`),
                 Node(kind: Sequence, children: @[])],
               typ: `ret`)
-        # echo "hh", handlerCode[^2][^1][^1][^1][^1][^1][^1].treerepr
         for arg in nimArgs:
           handlerCode[^2][^1][^1][^1][^1][^1][^1].add(arg)
       elif child[2].kind == nnkIdent:
@@ -522,7 +521,6 @@ proc loadMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[No
           genericMap[methodIdiom.genericArgs[z].label] = receiver.typ.args[z]
         var valid = true
         for z in 0..<len(args):
-          # echo genericMap
           if not methodIdiom.args[z].unify(args[z].typ, genericMap):
             valid = false
             break

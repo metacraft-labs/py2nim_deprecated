@@ -41,7 +41,14 @@ proc loadAst*(db: DeducktDb, filename: string): Node =
 
 proc startPath*(db: DeducktDb): string =
   # TODO: smarter
+  result = ""
+  var maybeResult = ""
   for module in db.modules:
     if module.startsWith(db.projectDir):
-      result = module
-      break
+      if module.endsWith("constants.py"):
+        result = module
+        break
+      elif maybeResult == "":
+        maybeResult = module
+  if result == "":
+    result = maybeResult

@@ -16,6 +16,7 @@ type
     stack*: seq[(string, seq[(Type, string)])]
     path*: string
     envs*: Table[string, Env]
+    constants*: Table[string, Type]
     untilPass*: Pass
     generated*: Table[string, string]
     currentModule*: string
@@ -51,6 +52,12 @@ proc registerImport(compiler: var Compiler, label: string)
 proc compileDocstring(compiler: var Compiler, node: Node, env: var Env): seq[string]
 
 proc monitorCollisions(compiler: var Compiler, label: string)
+
+proc elementOf(typ: Type): Type
+
+proc firstElementOf(typ: Type): Type
+
+proc secondElementOf(typ: Type): Type
 
 proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
@@ -180,7 +187,17 @@ proc compileAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
     var label = node[0][0].label
     node[1] = value
     if not env.types.hasKey(label):
-      node.declaration = Declaration.Var
+      echo compiler.path
+      if compiler.path.endsWith("constants.py"): 
+        # weird?
+        # most libraries I test have it
+        # so use it for now, if we need, we can make add a flag
+        node.declaration = Declaration.Const
+        if compiler.constants.hasKey(label) and compiler.constants[label] != value.typ:
+          warn(fmt"const type: {label}")
+        compiler.constants[label] = value.typ
+      else:
+        node.declaration = Declaration.Var
     env[label] = value.typ
     compiler.monitorCollisions(label)
   elif node[0][0].kind == PySubscript:
@@ -223,20 +240,23 @@ proc compileInt(compiler: var Compiler, name: string, args: seq[Node], env: var 
   result = call(Node(kind: PyLabel, label: name), args, T.Int)
 
 proc compileBytes(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
-  var a: seq[Node] = @[]
-  for arg in args:
-    var ar = arg
-    a.add(compiler.compileNode(ar, env))
   var arg: Node
-  if a[0].kind == PyStr:
-    arg = a[0]
-  elif a[0].kind == PyList:
-    for z, next in a[0].children:
-      a[0][z] = attribute(next, "char")
-    let list = a[0]
+  if args[0].kind == PyStr:
+    arg = args[0]
+  elif args[0].kind == PyList:
+    var list = args[0]
+    for z, next in list.children:
+      list[z] = attribute(next, "char")
     arg = call(attribute(list, "join"), @[pyString("")])
     compiler.registerImport("strutils")
   result = call(Node(kind: PyLabel, label: "cstring"), @[arg], T.Bytes)
+
+proc compileEnumerate(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  if len(args) != 1:
+    warn("weird enumerate")
+    result = PY_NIL
+  else:
+    result = args[0]
 
 var BUILTIN* = {
   "print": "echo"
@@ -249,7 +269,8 @@ var SPECIAL_FUNCTIONS* = {
   "reversed": compileReversed,
   "isinstance": compileIsinstance,
   "int": compileInt,
-  "bytes": compileBytes
+  "bytes": compileBytes,
+  "enumerate": compileEnumerate
 }.toTable()
 
 proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
@@ -833,25 +854,23 @@ proc compileFor*(compiler: var Compiler, node: var Node, env: var Env): Node =
 
   if sequence.kind == PyCall and sequence[0].kind == PyAttribute and sequence[0][1].kind == PyStr and sequence[0][1].s == "items":
     let candidateDict = compiler.compileNode(sequence[0][0], env)
-    if candidateDict.typ.isDict():
-      node[1] = candidateDict
-      if element.kind == PyLabel:
-        element.typ = candidateDict.typ.args[0]
-        env[element.label] = element.typ
-      elif element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
-        element[0].typ = candidateDict.typ.args[0]
-        element[1].typ = candidateDict.typ.args[1]
-        env[element[0].label] = element[0].typ
-        env[element[1].label] = element[1].typ
+    node[1] = candidateDict
+    if element.kind == PyLabel:
+      element.typ = firstElementOf(candidateDict.typ)
+      env[element.label] = element.typ
+    elif element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
+      element[0].typ = firstElementOf(candidateDict.typ)
+      element[1].typ = secondElementOf(candidateDict.typ)
+      env[element[0].label] = element[0].typ
+      env[element[1].label] = element[1].typ
   elif sequence.kind == PyCall and sequence[0].kind == PyLabel and sequence[0].label == "enumerate":
     let candidateList = compiler.compileNode(sequence[1][0], env)
-    if candidateList.typ.isList():
-      node[1] = candidateList
-      if element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
-        element[0].typ = T.Int
-        element[1].typ = candidateList.typ.args[0]
-        env[element[0].label] = element[0].typ
-        env[element[1].label] = element[1].typ
+    node[1] = candidateList
+    if element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
+      element[0].typ = T.Int
+      element[1].typ = elementOf(candidateList.typ)
+      env[element[0].label] = element[0].typ
+      env[element[1].label] = element[1].typ
   elif sequence.kind == PyCall and sequence[0].kind == PyLabel and sequence[0].label == "range":
     var start: Node
     var finish: Node
@@ -930,6 +949,38 @@ proc replaceNode(node: Node, original: Node, newNode: Node): Node =
       result[z] = replaceNode(child, original, newNode)
       z += 1
 
+proc elementOf(typ: Type): Type =
+  if typ.isList():
+    result = typ.args[0]
+  elif typ.isDict():
+    result = typ.args[0]
+  elif typ == T.String:
+    result = T.Char
+  elif typ == T.Bytes:
+    result = T.Int
+  else:
+    result = NIM_ANY
+
+proc firstElementOf(typ: Type): Type =
+  if typ.isList():
+    result = T.Int
+  elif typ.isDict():
+    result = typ.args[0]
+  else:
+    result = T.Int
+
+proc secondElementOf(typ: Type): Type =
+  if typ.isList():
+    result = typ.args[0]
+  elif typ.isDict():
+    result = typ.args[1]
+  elif typ == T.String:
+    result = T.Char
+  elif typ == T.Bytes:
+    result = T.Int
+  else:
+    result = NIM_ANY
+
 proc compileListComp(compiler: var Compiler, node: var Node, env: var Env): Node =
   # [code for element in a]
   #
@@ -947,15 +998,17 @@ proc compileListComp(compiler: var Compiler, node: var Node, env: var Env): Node
   assert node[1][0].kind == Pycomprehension and node[1][0][3].kind == PyInt and node[1][0][3].i == 0
   
   let sequence = compiler.compileNode(node[1][0][1], env)
-  if not sequence.typ.isList():
-    warn(fmt"list comprehension on {$sequence.typ}")
-    return compiler.commentedOut(node)
+  if not sequence.typ.isList() and
+     not sequence.typ.isDict() and
+     sequence.typ != T.String and
+     sequence.typ != T.Bytes:
+    warn(fmt"list comprehension which is not on iterable might fail: {$sequence.typ}")
   var element = node[1][0][0]
   var code = node[0]
   if element.kind != PyLabel:
     warn("only list comprehension with `element` in supported")
     return compiler.commentedOut(node)
-  let types = {"it": sequence.typ.args[0]}.toTable()
+  let types = {"it": elementOf(sequence.typ)}.toTable()
   var codeEnv = childEnv(env, "<code>", types, nil)
   var mapIt = replaceNode(code, element, Node(kind: PyLabel, label: "it"))
   let mapCode = compiler.compileNode(mapIt, codeEnv)
@@ -992,8 +1045,11 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
     sequence = compiler.compileNode(node[2][0][1][0][0], env)
   else:
     sequence = compiler.compileNode(node[2][0][1], env)
-  if not sequence.typ.isDict() and not sequence.typ.isList():
-    warn(fmt"dict comp without dict or list not supported: {$sequence.typ}")
+  if not sequence.typ.isDict() and 
+     not sequence.typ.isList() and
+     sequence.typ != T.String and
+     sequence.typ != T.Bytes:
+    warn(fmt"dict comp without iterable might fail: {$sequence.typ}")
     return compiler.commentedOut(node)
 
   var element = node[2][0][0]
@@ -1006,14 +1062,14 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
   if len(node[2][0][2].children) > 0:
     test = node[2][0][2]
 
-  if sequence.typ.isList() and element.kind == PyLabel:
-    types = {"it": sequence.typ.args[0]}.toTable()
+  if element.kind == PyLabel:
+    types = {"it": elementOf(sequence.typ)}.toTable()
     keyReplaced = replaceNode(key, element, Node(kind: PyLabel, label: "it"))
     valueReplaced = replaceNode(value, element, Node(kind: PyLabel, label: "it"))
     if not test.isNil:
       test = replaceNode(test, element, Node(kind: PyLabel, label: "it"))
-  elif sequence.typ.isDict() and element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
-    types = {"k": sequence.typ.args[0], "v": sequence.typ.args[1]}.toTable()
+  elif element.kind == PyTuple and element[0].kind == PyLabel and element[1].kind == PyLabel:
+    types = {"k": firstElementOf(sequence.typ), "v": secondElementOf(sequence.typ)}.toTable()
     keyReplaced = replaceNode(key, element[0], Node(kind: PyLabel, label: "k"))
     keyReplaced = replaceNode(keyReplaced, element[1], Node(kind: PyLabel, label: "v"))
     valueReplaced = replaceNode(value, element[0], Node(kind: PyLabel, label: "k"))
@@ -1369,7 +1425,6 @@ proc mergeFunctionTypeInfo(compiler: var Compiler, node: var Node, env: var Env)
   assert typ.kind in {N.Overloads, N.Function}
 
   typ.label = label
-  # typ.fullLabel = fullName
   env[label] = typ
   result = node
   result.typ = typ
@@ -1396,7 +1451,6 @@ proc mergeCallTypeInfo(compiler: var Compiler, node: var Node, env: var Env): No
   result = node
 
 proc mergeModuleTypeInfo(compiler: var Compiler, node: var Node, env: var Env): Node =
-  # loads aliases , functions and classes
   if node.isNil:
     return
   case node.kind:
@@ -1420,15 +1474,14 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyMod
   var firstPath = compiler.db.startPath()
   var node = compiler.db.loadAst(firstPath)
   compiler.maybeModules = {firstPath: true}.toTable()
+  compiler.constants = initTable[string, Type]()
   compiler.asts = {firstPath: node}.toTable()
   compiler.modules = initTable[string, Module]()
   compiler.generated = initTable[string, string]()
   compiler.base = firstPath.rsplit("/", 1)[0]
   compiler.identifierCollisions = initTable[string, (string, bool)]()
-  # while len(compiler.maybeModules) > 0:
   for z, path in compiler.db.modules:
-    if path.startsWith(compiler.db.projectDir) and path.endsWith(onlyModule): # and "codec" in path:
-    # for path, maybe in compiler.maybeModules:
+    if path.startsWith(compiler.db.projectDir) and (path.endsWith("constants.py") or path.endsWith(onlyModule)):
       try:
         if not compiler.modules.hasKey(path):
           if not compiler.asts.hasKey(path):
@@ -1436,7 +1489,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyMod
           compiler.currentModule = compiler.loadNamespace(path)
           compiler.modules[path] = Module(name: compiler.currentModule, imports: @[], types: @[], functions: @[], init: @[])
           compiler.stack = @[]
-          compiler.envs = {path: childEnv(nil, "", initTable[string, Type](), nil)}.toTable()
+          compiler.envs = {path: childEnv(nil, "", compiler.constants, nil)}.toTable()
           compiler.currentFunction = ""
           var node = compiler.asts[path]
           var env = compiler.envs[path]
@@ -1444,7 +1497,6 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyMod
           compiler.compileAst(path)
       except Exception:
         echo getCurrentExceptionMsg()
-        # raise getCurrentException()
   if untilPass == Pass.Generation:
     var identifierCollisions = initSet[string]()
     for label, collision in compiler.identifierCollisions:

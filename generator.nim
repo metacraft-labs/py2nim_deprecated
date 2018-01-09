@@ -64,8 +64,12 @@ proc generateClass(generator: var Generator, t: Node): PNode =
   assert t.typ.kind == N.Record
 
   var recList: PNode
+  var docstring: PNode
   if len(t.typ.members) > 0:
     recList = nkRecList.newTree()
+    if len(t.docstring) > 0:
+      recList.add(newNode(nkEmpty))
+      recList[^1].comment = t.docstring.join("\n")
     for member, a in t.typ.members:
       recList.add(nkIdentDefs.newTree(
         nkPostfix.newTree(generateIdent("*"), generateIdent(member)),
@@ -73,6 +77,10 @@ proc generateClass(generator: var Generator, t: Node): PNode =
         emptyNode))
   else:
     recList = emptyNode
+    if len(t.docstring) > 0:
+      docstring = newNode(nkEmpty)
+      docstring.comment = t.docstring.join("\n")
+
 
   var base: PNode
   if not t.typ.base.isNil:
@@ -93,6 +101,9 @@ proc generateClass(generator: var Generator, t: Node): PNode =
     objectNode)
 
   result = nkTypeSection.newTree(tNode)
+  if not docstring.isNil:
+    result.add(docstring)
+
 
 proc generateType(generator: var Generator, typ: Type): PNode =
   if typ.isNil:
@@ -176,6 +187,10 @@ proc generateFunction(generator: var Generator, function: Node): PNode =
   if children.kind != nkStmtList:
     children = nkStmtList.newTree(children)
   result.sons[^1] = children
+  if len(function.doc) > 0:
+    var docstring = newNode(nkEmpty)
+    docstring.comment = function.doc.join("\n")
+    result.sons[^1] = nkStmtList.newTree(docstring, result.sons[^1])
 
 proc generateDeclaration(generator: var Generator, declaration: Declaration): string =
   let declarations: array[Declaration, string] = ["", "let ", "var ", "const "]
@@ -301,10 +316,13 @@ let SYMBOLS* = {
   PyIs: "is",
   PyIsNot: "isnot",
   PyIn: "in",
-  PyNotIn: "notin"
+  PyNotIn: "notin",
+  PyBitAnd: "and",
+  PyBitOr: "or"
 }.toTable()
 
 proc generateOp(generator: var Generator, op: Node): PNode =
+  # echo op
   let s = if SYMBOLS.hasKey(op.kind): SYMBOLS[op.kind] else: op.label
   result = generateIdent(s)
 
@@ -440,6 +458,21 @@ proc generateImport(generator: var Generator, node: Node): PNode =
   for child in node:
     result.add(emitNode(child))
 
+proc generateIndex(generator: var Generator, node: Node): PNode =
+  result = emitNode(node[0])
+
+proc generateAugAssign(generator: var Generator, node: Node): PNode =
+  result = nkInfix.newTree(generateIdent("+="), emitNode(node[0]), emitNode(node[1]))
+
+proc generateMath(generator: var Generator, op: string, node: Node): PNode =
+  result = nkInfix.newTree(generateIdent(op), emitNode(node[0]), emitNode(node[1]))
+
+proc generateSlice(generator: var Generator, node: Node): PNode =
+  var start = if node[0].kind != PyNone: emitNode(node[0]) else: newIntNode(nkIntLit, 0)
+  var finish = if node[0].kind != PyNone: emitNode(node[1]) else: nkPrefix.newTree(generateIdent("^"), newIntNode(nkIntLit, 1))
+  var op = if node[0].kind != PyNone: "..<" else: ".."
+  result = nkInfix.newTree(generateIdent(op), start, finish)
+
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
@@ -521,6 +554,20 @@ proc generateNode(generator: var Generator, node: Node): PNode =
     result = generator.generatePrefix(node)
   of PyImport:
     result = generator.generateImport(node)
+  of PyIndex:
+    result = generator.generateIndex(node)
+  of PyAugAssign:
+    result = generator.generateAugAssign(node)
+  of PyAdd:
+    result = generator.generateOp(node)
+  of PySub:
+    result = generator.generateOp(node)
+  of PyMult:
+    result = generator.generateOp(node)
+  of PyFloorDiv:
+    result = generator.generateOp(node)
+  of PySlice:
+    result = generator.generateSlice(node)
   else:
     echo "?", node.kind
     result = emptyNode
@@ -557,7 +604,7 @@ proc generate*(generator: var Generator, module: Module): string =
     if i.kind != PyNone:
       generator.res.add(generator.generateNode(i))
 
-  result = generator.res.renderTree() & "\n"
+  result = generator.res.renderTree({renderDocComments}) & "\n"
   if result.startsWith("  "):
   #   # XXX: sometimes, the rendered code is indented, try to fix this here
     result = result.splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n")

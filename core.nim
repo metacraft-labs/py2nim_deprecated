@@ -91,7 +91,9 @@ proc pyBytes*(b: cstring): Node =
   result = Node(kind: PyBytes, s: $b, typ: T.Bytes)
 
 proc isList*(typ: Type): bool =
-  if typ.kind == N.Generic and typ == T.List:
+  if typ.isNil:
+    return false
+  elif typ.kind == N.Generic and typ == T.List:
     result = true
   elif typ.kind == N.Compound and typ.original == T.List:
     result = true
@@ -99,7 +101,9 @@ proc isList*(typ: Type): bool =
     result = false
 
 proc isDict*(typ: Type): bool =
-  if typ.kind == N.Generic and typ == T.Dict:
+  if typ.isNil:
+    return false
+  elif typ.kind == N.Generic and typ == T.Dict:
     result = true
   elif typ.kind == N.Compound and typ.original == T.Dict:
     result = true

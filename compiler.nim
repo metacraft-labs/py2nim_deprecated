@@ -45,6 +45,8 @@ proc replaceNode(node: Node, original: Node, newNode: Node): Node
 
 proc registerImport(compiler: var Compiler, label: string)
 
+proc compileDocstring(compiler: var Compiler, node: var Node, env: var Env): seq[string]
+
 proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
   result = node
@@ -499,6 +501,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     result = typed(node, typ)
   if not compiler.currentClass.isNil and (not compiler.currentClass.base.isNil or compiler.currentClass.inherited):
     result.isMethod = true
+  result.doc = compiler.compileDocstring(node[5], env)
 
 proc compileAttribute*(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
@@ -616,6 +619,28 @@ proc createInit(compiler: var Compiler, assignments: seq[Node]): Node =
       PY_NIL])
   result.typ = Type(kind: N.Function, label: compiler.currentClass.init, functionArgs: @[], returnType: compiler.currentClass)
 
+proc compileDocstring(compiler: var Compiler, node: var Node, env: var Env): seq[string] =
+  if node.kind != PyStr:
+    result = @[]
+  else:
+    result = node.s.split("\\n").mapIt(it.strip(leading=false))
+    if len(result[0].strip()) == 0:
+      result = result[1..^1]
+    if len(result) > 0 and len(result[^1].strip()) == 0:
+      result = result[0..^2]
+    var unindent = 200
+    for line in result:
+      var offset = 0
+      for c in line:
+        if c == ' ':
+          offset += 1
+        else:
+          break
+      if offset < unindent and offset > 0:
+        unindent = offset
+    result = result.mapIt(if len(it) == 0: it else: it[unindent..^1])
+
+
 proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node =
   assert node[0].kind == PyStr
   let label = node[0].s
@@ -623,6 +648,7 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
   compiler.currentClass = typ
   compiler.currentClass.init = ""
 
+  node.docstring = compiler.compileDocstring(node[5], env)
   node[0] = Node(kind: PyLabel, label: label)
 
   if node[1].kind == Sequence and len(node[1].children) > 0:
@@ -1246,6 +1272,8 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
     warn(fmt"compile {getCurrentExceptionMsg()}")
     result = PY_NIL
     # raise getCurrentException()
+  if result.typ.isNil:
+    result.typ = NIM_ANY
 
 proc compileAst*(compiler: var Compiler, file: string) =
   var node = compiler.asts[file]

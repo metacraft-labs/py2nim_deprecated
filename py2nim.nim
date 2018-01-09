@@ -2,7 +2,7 @@ import os, strformat, strutils, sequtils, tables, json, macros, parseopt2
 import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
-  echo "py2nim [-o --output <outputdir>] [-a --ast] [-h --help] <test.py> args"
+  echo "py2nim [-o --output <outputdir>] [-a --ast] [-n --no-trace] [-h --help] <test.py> args"
   quit(1)
 
 proc save(compiler: Compiler, output: string, untilPass: Pass) =
@@ -24,6 +24,7 @@ proc translate =
   var nimArgs: seq[string] = @[]
   var pythonArgs: seq[string] = @[]
   var inPython = false
+  var noTrace = false
   for z in 1..paramCount():
     var arg = paramStr(z)
     if not inPython and not arg.endsWith(".py"):
@@ -46,6 +47,7 @@ proc translate =
       case key:
       of "output", "o": output = arg
       of "ast", "a": untilPass = Pass.AST
+      of "no-trace", "n": noTrace = true
       of "help", "h": writeHelp()
     else:
       discard
@@ -55,7 +57,8 @@ proc translate =
 
 
   # trace it and collect types
-  tracePython(command)
+  if not noTrace:
+    tracePython(command)
   var db = deduckt_db.load("python-deduckt.json")
 
   # load ast

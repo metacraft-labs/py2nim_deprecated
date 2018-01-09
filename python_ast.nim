@@ -49,6 +49,9 @@ type
       isMethod*: bool
       calls*: HashSet[string]
       isGeneric*: bool
+      doc*: seq[string]
+    of PyClassDef:
+      docstring*: seq[string]
     else:
       discard
     children*: seq[Node] # complicates everything to have it disabled for several nodes

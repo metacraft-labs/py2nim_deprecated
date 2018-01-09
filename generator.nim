@@ -473,6 +473,11 @@ proc generateSlice(generator: var Generator, node: Node): PNode =
   var op = if node[0].kind != PyNone: "..<" else: ".."
   result = nkInfix.newTree(generateIdent(op), start, finish)
 
+proc generateCommentedOut(generator: var Generator, node: Node): PNode =
+  result = newNode(nkEmpty)
+  if node[0].kind == PyStr:
+    result.comment = fmt"py2nim can't generate code for{endl}{node[0].s}"
+
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
@@ -568,6 +573,8 @@ proc generateNode(generator: var Generator, node: Node): PNode =
     result = generator.generateOp(node)
   of PySlice:
     result = generator.generateSlice(node)
+  of NimCommentedOut:
+    result = generator.generateCommentedOut(node)
   else:
     echo "?", node.kind
     result = emptyNode
@@ -591,7 +598,7 @@ proc generate*(generator: var Generator, module: Module): string =
         if index >= z:
           break
         # echo function.typ
-        if previous.calls.contains(function.typ.label):
+        if isValid(previous.calls) and previous.calls.contains(function.typ.label):
           forward.add(function)
 
   for function in forward:

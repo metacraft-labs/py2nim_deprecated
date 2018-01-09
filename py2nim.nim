@@ -1,4 +1,4 @@
-import os, strformat, strutils, sequtils, tables, json, macros, parseopt2
+import os, strformat, strutils, sequtils, tables, json, macros, parseopt2, helpers, osproc
 import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
@@ -7,6 +7,7 @@ proc writeHelp =
 
 proc save(compiler: Compiler, output: string, untilPass: Pass) =
   discard existsOrCreateDir(output)
+  var folders = initTable[string, bool]()
   if untilPass == Pass.AST:
     # save a repr of ast
     for file, module in compiler.modules:
@@ -14,8 +15,19 @@ proc save(compiler: Compiler, output: string, untilPass: Pass) =
       writeFile(fmt"{output}/{filename}.nim", $module)
   else:
     for file, generated in compiler.generated:
-      let filename = file.rsplit("/", 1)[1].split(".")[0]
-      writeFile(fmt"{output}/{filename}.nim", generated)
+      let tokens = file.rsplit("/", 1)
+      let filename = tokens[1].split(".")[0]
+      if tokens[0].startsWith(compiler.db.projectDir):
+        var folder = tokens[0][len(compiler.db.projectDir)..^1]
+        if len(folder) > 0 and folder[0] == '/':
+          folder = folder[1..^1]
+        if not folders.hasKey(folder):
+          folders[folder] = true
+          var exit = execCmd(fmt"mkdir -p {output}/{folder}/")
+          if exit != 0:
+            echo fmt"can't create {folder}"
+        success(fmt"compiled to Nim: {output}/{folder}/{filename}.nim")
+        writeFile(fmt"{output}/{folder}/{filename}.nim", generated)
 
 proc translate =
   var command = ""

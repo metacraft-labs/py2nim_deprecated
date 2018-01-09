@@ -12,4 +12,7 @@ proc fail*(a: Textable) =
   writeStackTrace()
   quit(1)
 
+proc success*(a: Textable) =
+  styledWriteLine(stdout, fgGreen, a, resetStyle)
+
 echo string is Textable

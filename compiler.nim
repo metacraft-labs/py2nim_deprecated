@@ -216,6 +216,22 @@ proc compileIsinstance(compiler: var Compiler, name: string, args: seq[Node], en
 proc compileInt(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   result = call(Node(kind: PyLabel, label: name), args, T.Int)
 
+proc compileBytes(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  var a: seq[Node] = @[]
+  for arg in args:
+    var ar = arg
+    a.add(compiler.compileNode(ar, env))
+  var arg: Node
+  if a[0].kind == PyStr:
+    arg = a[0]
+  elif a[0].kind == PyList:
+    for z, next in a[0].children:
+      a[0][z] = attribute(next, "char")
+    let list = a[0]
+    arg = call(attribute(list, "join"), @[pyString("")])
+    compiler.registerImport("strutils")
+  result = call(Node(kind: PyLabel, label: "cstring"), @[arg], T.Bytes)
+
 var BUILTIN* = {
   "print": "echo"
 }.toTable()
@@ -226,7 +242,8 @@ var SPECIAL_FUNCTIONS* = {
   "len": compileLen,
   "reversed": compileReversed,
   "isinstance": compileIsinstance,
-  "int": compileInt
+  "int": compileInt,
+  "bytes": compileBytes
 }.toTable()
 
 proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
@@ -624,21 +641,21 @@ proc compileDocstring(compiler: var Compiler, node: var Node, env: var Env): seq
     result = @[]
   else:
     result = node.s.split("\\n").mapIt(it.strip(leading=false))
-    if len(result[0].strip()) == 0:
+    if len(result[0]) == 0:
       result = result[1..^1]
-    if len(result) > 0 and len(result[^1].strip()) == 0:
+    if len(result) > 0 and len(result[^1]) == 0:
       result = result[0..^2]
-    var unindent = 200
-    for line in result:
-      var offset = 0
-      for c in line:
-        if c == ' ':
-          offset += 1
-        else:
-          break
-      if offset < unindent and offset > 0:
-        unindent = offset
-    result = result.mapIt(if len(it) == 0: it else: it[unindent..^1])
+    # var unindent = 200
+    # for line in result:
+    #   var offset = 0
+    #   for c in line:
+    #     if c == ' ':
+    #       offset += 1
+    #     else:
+    #       break
+    #   if offset < unindent and offset > 0:
+    #     unindent = offset
+    # result = result.mapIt(if len(it) == 0: it else: it[unindent..^1])
 
 
 proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node =

@@ -12,3 +12,4 @@ python-deduckt.json
 a.nim
 
 output/
+.hypothesis

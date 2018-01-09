@@ -322,10 +322,12 @@ let SYMBOLS* = {
   PyIn: "in",
   PyNotIn: "notin",
   PyBitAnd: "and",
-  PyBitOr: "or"
+  PyBitOr: "or",
+  PyMod: "mod"
 }.toTable()
 
 proc generateOp(generator: var Generator, op: Node): PNode =
+  echo op
   let s = if SYMBOLS.hasKey(op.kind): SYMBOLS[op.kind] else: op.label
   result = generateIdent(s)
 
@@ -485,6 +487,9 @@ proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
   # log fmt"generate {node.kind}"
+  if node.isNil:
+    result = nilNode
+    return
   case node.kind:
   of PyAssign:
     result = generator.generateAssign(node)

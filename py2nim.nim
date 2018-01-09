@@ -2,7 +2,27 @@ import os, strformat, strutils, sequtils, tables, json, macros, parseopt2, helpe
 import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
-  echo "py2nim [-o --output <outputdir>] [-a --ast] [-n --no-trace] [-h --help] <test.py> args"
+  echo """
+py2nim [-o --output <outputdir>] [-a --ast] [-n --no-trace] [-m --module <module>] [-h --help] <test.py> args
+
+--output:<outputdir>   specifies an output dir
+--ast                  generates ast repr
+--no-trace             starts based on the current python-deduckt.json
+--module:<filename>    compiles only this module
+--help                 shows this message
+
+examples:
+
+py2nim -o:a ~/a/test.py
+# generates in a
+
+py2nim -n -o:a ~/a/test.py
+# starts based on the current python-deduckt.json
+
+py2nim -m:a.py ~/a/test.py
+# translates only a.py
+"""
+
   quit(1)
 
 proc save(compiler: Compiler, output: string, untilPass: Pass) =

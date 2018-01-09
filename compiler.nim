@@ -1322,7 +1322,7 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   except Exception:
     warn(fmt"compile {getCurrentExceptionMsg()}")
     result = PY_NIL
-    raise getCurrentException()
+    # raise getCurrentException()
   if result.typ.isNil:
     result.typ = NIM_ANY
 
@@ -1440,7 +1440,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation) =
           compiler.compileAst(path)
       except Exception:
         echo getCurrentExceptionMsg()
-        raise getCurrentException()
+        # raise getCurrentException()
   if untilPass == Pass.Generation:
     var identifierCollisions = initSet[string]()
     for label, collision in compiler.identifierCollisions:

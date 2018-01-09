@@ -1,4 +1,4 @@
-import strutils, sequtils, tables, sets, future
+import strutils, strformat, sequtils, tables, sets, future
 import nim_types, gen_kind
 
 type
@@ -193,8 +193,14 @@ proc deepCopy*(a: Node): Node =
     result.children.add(deepCopy(child))
 
 proc camelCase*(label: string): string =
-  let tokens = label.split("_")
-  result = tokens[0] & tokens[1..^1].mapIt(capitalizeAscii(it)).join("")
+  var remainder = label
+  var underline = 0
+  while underline < len(remainder) and remainder[underline] == '_':
+    underline += 1
+  if underline > 0:
+    remainder = remainder[underline..^1]
+  var tokens = remainder.split("_")
+  result = repeat("_", underline) & tokens[0] & tokens[1..^1].mapIt(if len(it) > 0: capitalizeAscii(it) else: "_").join("")
 
 proc translateIdentifier*(label: string): string =
   result = camelCase(label)

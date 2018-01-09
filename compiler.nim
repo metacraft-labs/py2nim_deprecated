@@ -103,25 +103,24 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
     else:
       result.init.add(child)
 
-  var maybeGeneric = initTable[string, (Node, bool, Table[string, Type])]()
-  for function in functions:
-    if function[0].kind != PyStr:
-      continue
-    elif not maybeGeneric.hasKey(function[0].s):
-      maybeGeneric[function[0].s] = (function, false, initTable[string, Type]())
-    else:
-      var (equivalent, genericMap) = genericCompatible(maybeGeneric[function[0].s][0], function)
-      if equivalent:
-        echo function
-        maybeGeneric[function[0].s][0].isGeneric = true
-        maybeGeneric[function[0].s] = (function, true, genericMap)
-        function.isGeneric = true
+  # var maybeGeneric = initTable[string, (Node, bool, Table[string, Type])]()
+  # for function in functions:
+  #   if function[0].kind != PyStr:
+  #     continue
+  #   elif not maybeGeneric.hasKey(function[0].s):
+  #     maybeGeneric[function[0].s] = (function, false, initTable[string, Type]())
+  #   else:
+  #     var (equivalent, genericMap) = genericCompatible(maybeGeneric[function[0].s][0], function)
+  #     if equivalent:
+  #       maybeGeneric[function[0].s][0].isGeneric = true
+  #       maybeGeneric[function[0].s] = (function, true, genericMap)
+  #       function.isGeneric = true
 
-  for label, f2 in maybeGeneric:
-    var (function, isGeneric, genericMap) = f2
-    if isGeneric:
-      var f = function
-      result.functions.add(replaceGeneric(f, genericMap))
+  # for label, f2 in maybeGeneric:
+  #   var (function, isGeneric, genericMap) = f2
+  #   if isGeneric:
+  #     var f = function
+  #     result.functions.add(replaceGeneric(f, genericMap))
 
   for function in functions:
     if not function.isGeneric:
@@ -319,6 +318,9 @@ proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
     right = attribute(right, "float", T.Float)
   elif left.typ == T.Int and right.typ == T.Float:
     left = attribute(left, "float", T.Float)
+  elif right.typ.isNil and left.typ.isNil:
+    right.typ = NIM_ANY
+    left.typ = NIM_ANY
   elif left.typ.isNil or left.typ.kind == N.Any:
     left.typ = right.typ
   elif right.typ.isNil or right.typ.kind == N.Any:
@@ -327,6 +329,7 @@ proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[2] = right
   result = node
   var imports: seq[string] = @[]
+
   if left.typ == T.Int or left.typ == T.Float:
     result.typ = left.typ
     # TODO:
@@ -350,6 +353,9 @@ proc translateInit(compiler: var Compiler, node: var Node, env: var Env, child: 
   if not child:
     result[0].s = compiler.currentClass.init
     result[1][0].children = result[1][0].children[1..^1]
+    if result.typ.isNil or result.typ.kind != N.Function:
+      warn("missing init type")
+      result.typ = Type(kind: N.Function, functionArgs: repeat(NIM_ANY, len(result[1][0].children)))
     result.typ.functionArgs = result.typ.functionArgs[1..^1]
     result.typ.returnType = compiler.currentClass
     result[2].children = assignments.concat(result[2].children)
@@ -461,7 +467,6 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   var z = 0
   for v in node[1][0]:
     assert v.kind == Pyarg and v[0].kind == PyStr
-    # echo node[1][0]
     args[v[0].s] = typ.functionArgs[z]
     z += 1
 

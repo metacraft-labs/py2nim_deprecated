@@ -24,6 +24,7 @@ type
     currentFunction*: string
     currentCalls*: HashSet[string]
     base*: string
+    depth*: int
     identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision) 
                                                           # if there is already a different existing identifier 
                                                           # for that idiomatic one, toggle collision to true
@@ -58,6 +59,8 @@ proc elementOf(typ: Type): Type
 proc firstElementOf(typ: Type): Type
 
 proc secondElementOf(typ: Type): Type
+
+proc findSource(compiler: var Compiler, node: Node): string
 
 proc typed(node: var Node, typ: Type): Node =
   node.typ = typ
@@ -98,6 +101,7 @@ proc genericCompatible(a: Node, b: Node): (bool, Table[string, Type]) =
 proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   var moduleEnv = compiler.envs[file]
   compiler.currentClass = nil
+  compiler.depth = 0
   var childNodes: seq[Node] = @[]
   for child in node.mitems:
     childNodes.add(compiler.compileNode(child, moduleEnv))
@@ -641,6 +645,7 @@ proc compileReturn(compiler: var Compiler, node: var Node, env: var Env): Node =
 
 proc compileIf(compiler: var Compiler, node: var Node, env: var Env): Node =
   result = node
+  var (line, column) = (node[0].line, node[0].column)
   if node[0].kind == PyCompare and node[0][0].kind == PyLabel and
      node[0][0].label == "__name__" and
      node[0][1][0].kind == PyEq and node[0][2][0].kind == PyStr and node[0][2][0].s == "__main__":
@@ -649,7 +654,8 @@ proc compileIf(compiler: var Compiler, node: var Node, env: var Env): Node =
   else:
     result[0] = compiler.compileNode(node[0], env)
     if result[0].typ != T.Bool:
-      warn(fmt"expected bool got {$result[0].typ} if")
+      var info = findSource(compiler.path, line, column, "test")
+      warn(fmt"expected bool got {$result[0].typ} if: {info}")
   result[1] = compiler.compileNode(node[1], env)
 
 proc compileCompare(compiler: var Compiler, node: var Node, env: var Env): Node =
@@ -931,11 +937,14 @@ proc compileWhile(compiler: var Compiler, node: var Node, env: var Env): Node =
   node[1] = compiler.compileNode(node[1], env)
   result = node
 
+proc findSource(compiler: var Compiler, node: Node): string =
+  result = findSource(compiler.path, node.line, node.column, $node)
+
 proc commentedOut(s: string): Node =
   result = Node(kind: NimCommentedOut, children: @[Node(kind: PyStr, s: s, typ: T.String)], typ: NIM_ANY)
 
-proc commentedOut(compiler: Compiler, node: Node): Node =
-  var exp = findSource(compiler.path, node.line, node.column, $node)
+proc commentedOut(compiler: var Compiler, node: Node): Node =
+  var exp = compiler.findSource(node)
   result = commentedOut(exp)
 
 proc replaceNode(node: Node, original: Node, newNode: Node): Node =
@@ -1284,13 +1293,24 @@ proc compileDelete(compiler: var Compiler, node: var Node, env: var Env): Node =
   var element = compiler.compileNode(node[0][1], env)
   result = call(Node(kind: PyLabel, label: "del"), @[sequence, element], T.Void)
 
+proc compileUnaryOp(compiler: var Compiler, node: var Node, env: var Env): Node =
+  node[1] = compiler.compileNode(node[1], env)
+  var typ = case node[0].kind:
+    of PyNot: T.Bool
+    else: node[1].typ
+  result = typed(node, typ)
+
+proc compileIn(compiler: var Compiler, node: var Node, env: var Env): Node =
+  echo node
+
 proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
-  # echo fmt"compile {node.kind}"
+  echo fmt"{repeat(' ', compiler.depth)}compile {node.kind}"
   try:
     if node.ready:
       result = node
       return
+    compiler.depth += 1
     case node.kind:
     of PyImport:
       result = compiler.compileImport(node, env)
@@ -1374,10 +1394,16 @@ proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
       result = compiler.compileSlice(node, env)
     of PyDelete:
       result = compiler.compileDelete(node, env)
+    of PyUnaryOp:
+      result = compiler.compileUnaryOp(node, env)
+    of PyIn:
+      result = compiler.compileIn(node, env)
     else:
       result = PY_NIL
       warn($node.kind)
       # fail($node.kind)
+    if compiler.depth > 0:
+      compiler.depth -= 1
   except Exception:
     warn(fmt"compile {getCurrentExceptionMsg()}")
     result = PY_NIL

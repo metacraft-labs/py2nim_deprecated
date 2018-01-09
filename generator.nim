@@ -348,7 +348,7 @@ let SYMBOLS* = {
   PyNotIn: "notin",
   PyBitAnd: "and",
   PyBitOr: "or",
-  PyMod: "mod"
+  PyMod: "mod",
 }.toTable()
 
 proc generateOp(generator: var Generator, op: Node): PNode =
@@ -508,6 +508,9 @@ proc generateCommentedOut(generator: var Generator, node: Node): PNode =
   if node[0].kind == PyStr:
     result.comment = fmt"py2nim can't generate code for{endl}{node[0].s}"
 
+proc generateContinue(generator: var Generator, node: Node): PNode =
+  result = nkContinueStmt.newTree(emptyNode)
+
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   # generator.log "generate"
@@ -608,6 +611,8 @@ proc generateNode(generator: var Generator, node: Node): PNode =
     result = generator.generateSlice(node)
   of NimCommentedOut:
     result = generator.generateCommentedOut(node)
+  of PyContinue:
+    result = generator.generateContinue(node)
   else:
     echo "?", node.kind
     result = emptyNode

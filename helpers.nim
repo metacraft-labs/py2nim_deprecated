@@ -16,8 +16,8 @@ proc success*(a: Textable) =
   styledWriteLine(stdout, fgGreen, a, resetStyle)
 
 proc findSource*(path: string, line: int, column: int, text: string): string =
-  echo path, line, column
-  if line == -1 or column == -1:
+  # echo path, line, column
+  if line < 1 or column < 0:
     result = text
     return
   try:
@@ -34,5 +34,3 @@ proc findSource*(path: string, line: int, column: int, text: string): string =
   except Exception:
     echo "cant open ", path
     result = text
-  echo result
-

@@ -1,4 +1,4 @@
-import strformat, terminal, os
+import strformat, strutils, terminal, os
 
 type
   Textable* = concept a
@@ -14,3 +14,25 @@ proc fail*(a: Textable) =
 
 proc success*(a: Textable) =
   styledWriteLine(stdout, fgGreen, a, resetStyle)
+
+proc findSource*(path: string, line: int, column: int, text: string): string =
+  echo path, line, column
+  if line == -1 or column == -1:
+    result = text
+    return
+  try:
+    let source = readFile(path)
+    let lines = source.splitLines()
+    if not (line - 1 < len(lines)):
+      result = text
+    else:
+      let lin = lines[line - 1]
+      if not (column < len(lin)):
+        result = text
+      else:
+        result = lin[column..^1]
+  except Exception:
+    echo "cant open ", path
+    result = text
+  echo result
+

@@ -916,6 +916,10 @@ proc compileWhile(compiler: var Compiler, node: var Node, env: var Env): Node =
 proc commentedOut(s: string): Node =
   result = Node(kind: NimCommentedOut, children: @[Node(kind: PyStr, s: s, typ: T.String)], typ: NIM_ANY)
 
+proc commentedOut(compiler: Compiler, node: Node): Node =
+  var exp = findSource(compiler.path, node.line, node.column, $node)
+  result = commentedOut(exp)
+
 proc replaceNode(node: Node, original: Node, newNode: Node): Node =
   if node.testEq(original):
     result = newNode
@@ -944,13 +948,13 @@ proc compileListComp(compiler: var Compiler, node: var Node, env: var Env): Node
   
   let sequence = compiler.compileNode(node[1][0][1], env)
   if not sequence.typ.isList():
-    warn("list comprehension on {$sequence.typ}")
-    return commentedOut($node)
+    warn(fmt"list comprehension on {$sequence.typ}")
+    return compiler.commentedOut(node)
   var element = node[1][0][0]
   var code = node[0]
   if element.kind != PyLabel:
     warn("only list comprehension with `element` in supported")
-    return commentedOut($node)    
+    return compiler.commentedOut(node)
   let types = {"it": sequence.typ.args[0]}.toTable()
   var codeEnv = childEnv(env, "<code>", types, nil)
   var mapIt = replaceNode(code, element, Node(kind: PyLabel, label: "it"))
@@ -989,8 +993,8 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
   else:
     sequence = compiler.compileNode(node[2][0][1], env)
   if not sequence.typ.isDict() and not sequence.typ.isList():
-    warn("dict comp without dict or list not supported")
-    return commentedOut($node)
+    warn(fmt"dict comp without dict or list not supported: {$sequence.typ}")
+    return compiler.commentedOut(node)
 
   var element = node[2][0][0]
   var key = node[0]

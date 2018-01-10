@@ -25,12 +25,13 @@ type
     currentCalls*: HashSet[string]
     base*: string
     depth*: int
+    debug*: bool
     identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision) 
                                                           # if there is already a different existing identifier 
                                                           # for that idiomatic one, toggle collision to true
 
-proc newCompiler*(db: DeducktDb, command: string): Compiler =
-  result = Compiler(db: db, command: command)
+proc newCompiler*(db: DeducktDb, command: string, debug: bool): Compiler =
+  result = Compiler(db: db, command: command, debug: debug)
 
 proc moduleOf*(compiler: Compiler, name: string): string =
   let tokens = compiler.currentModule.split(".")

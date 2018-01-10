@@ -3,12 +3,13 @@ import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =
   echo """
-py2nim [-o --output <outputdir>] [-a --ast] [-n --no-trace] [-m --module <module>] [-h --help] <test.py> args
+py2nim [-o --output <outputdir>] [-d --debug] [-a --ast] [-n --no-trace] [-m --module <module>] [-h --help] <test.py> args
 
 --output:<outputdir>   specifies an output dir
 --ast                  generates ast repr
 --no-trace             starts based on the current python-deduckt.json
 --module:<filename>    compiles only this module
+--debug                debug stuff
 --help                 shows this message
 
 examples:
@@ -51,6 +52,7 @@ proc save(compiler: Compiler, output: string, untilPass: Pass) =
         writeFile(fmt"{output}/{folder}/{filename}.nim", generated)
 
 proc translate =
+  var debug = false
   var command = ""
   var untilPass = Pass.Generation
   var output = "output"
@@ -80,6 +82,7 @@ proc translate =
     of cmdLongOption, cmdShortOption:
       case key:
       of "output", "o": output = arg
+      of "debug", "d": debug = true
       of "ast", "a": untilPass = Pass.AST
       of "no-trace", "n": noTrace = true
       of "module", "m": onlyModule = arg
@@ -102,7 +105,7 @@ proc translate =
   # var node = db.loadAst(path)
 
   # convert to idiomatic nim
-  var compiler = newCompiler(db, command)
+  var compiler = newCompiler(db, command, debug)
   compiler.compile(untilPass, onlyModule)
 
   save(compiler, output, untilPass)

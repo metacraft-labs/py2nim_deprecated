@@ -75,7 +75,8 @@ proc collapse(node: Node): seq[Node] =
   else:
     result = @[node]
 
-proc genericCompatible(a: Type, b: Type): (bool, Table[string, Type]) =
+proc genericCompatible(label: string, a: Type, b: Type): (bool, Table[string, Type]) =
+  echo "genericCompatible? ", label, " ", $a, " @ ", $b
   var genericMap = initTable[string, Type]()
   if a.isNil or b.isNil:
     return (false, genericMap)
@@ -90,11 +91,11 @@ proc genericCompatible(a: Type, b: Type): (bool, Table[string, Type]) =
       return (false, genericMap)
   return (true, genericMap)
 
-proc genericCompatible(a: Node, b: Node): (bool, Table[string, Type]) =
+proc genericCompatible(label: string, a: Node, b: Node): (bool, Table[string, Type]) =
   var genericMap = initTable[string, Type]()
   if a.kind != PyFunctionDef or b.kind != PyFunctionDef:
     return (false, genericMap)
-  result = a.typ.genericCompatible(b.typ)
+  result = genericCompatible(label, a.typ, b.typ)
   if result[0]:
     return (a[2].testEq(b[2]), genericMap)
 
@@ -128,7 +129,7 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   #   elif not maybeGeneric.hasKey(function[0].s):
   #     maybeGeneric[function[0].s] = (function, false, initTable[string, Type]())
   #   else:
-  #     var (equivalent, genericMap) = genericCompatible(maybeGeneric[function[0].s][0], function)
+  #     var (equivalent, genericMap) = genericCompatible(function[0].s, maybeGeneric[function[0].s][0], function)
   #     if equivalent:
   #       maybeGeneric[function[0].s][0].isGeneric = true
   #       maybeGeneric[function[0].s] = (function, true, genericMap)
@@ -220,14 +221,10 @@ proc compileSpecialStrMethod(compiler: var Compiler, name: string, args: seq[Nod
   result = call(label("$"), args, T.String)
 
 proc compileLen(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
-  var a: seq[Node] = @[]
-  for arg in args:
-    var arg2 = arg
-    a.add(compiler.compileNode(arg2, env))
-  if len(a) != 1:
-    result = call(Node(kind: PyLabel, label: name), a, NIM_ANY)
+  if len(args) != 1:
+    result = call(Node(kind: PyLabel, label: name), args, NIM_ANY)
   else:
-    result = call(Node(kind: PyLabel, label: name), a, T.Int)
+    result = call(Node(kind: PyLabel, label: name), args, T.Int)
 
 proc compileReversed(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   if len(args) == 1:
@@ -261,6 +258,13 @@ proc compileEnumerate(compiler: var Compiler, name: string, args: seq[Node], env
   else:
     result = args[0]
 
+proc compileAbs(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  if len(args) != 2:
+    warn(fmt"{name} expects 2 args")
+    result = PY_NIL
+  else:
+    result = call(Node(kind: PyLabel, label: name), args, args[0].typ)
+
 var BUILTIN* = {
   "print": "echo"
 }.toTable()
@@ -273,7 +277,9 @@ var SPECIAL_FUNCTIONS* = {
   "isinstance": compileIsinstance,
   "int": compileInt,
   "bytes": compileBytes,
-  "enumerate": compileEnumerate
+  "enumerate": compileEnumerate,
+  "min": compileAbs,
+  "max": compileAbs
 }.toTable()
 
 proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
@@ -892,6 +898,16 @@ proc compileFor*(compiler: var Compiler, node: var Node, env: var Env): Node =
     if element.kind == PyLabel:
       element.typ = T.Int
       env[element.label] = element.typ
+  elif sequence.kind == PyCall and sequence[0].kind == PyLabel and sequence[0].label == "zip" and len(sequence[1].children) == 2:
+    let first = compiler.compileNode(sequence[1][0], env)
+    let second = compiler.compileNode(sequence[1][1], env)
+    if element.kind == PyTuple and len(element.children) == 2 and element[0].kind == PyLabel and element[1].kind == PyLabel:
+      element[0].typ = elementOf(first.typ)
+      element[1].typ = elementOf(second.typ)
+      env[element[0].label] = element[0].typ
+      env[element[1].label] = element[1].typ
+    node[1] = call(Node(kind: PyLabel, label: "zip"), @[first, second], T.Void)
+    compiler.registerImport("sequtils")
   else:
     node[1] = compiler.compileNode(node[1], env)
   node[2] = compiler.compileNode(node[2], env)

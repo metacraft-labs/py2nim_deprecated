@@ -59,7 +59,8 @@ proc importType*(typ: JsonNode): PyType =
 
 proc tracePython*(command: string) =
   # echo fmt"python3 python-deduckt/deduckt/main.py {command}"
-  var res = execCmd(fmt"python3 python-deduckt/deduckt/main.py {command} > /dev/null")
+  var folder = currentSourcePath.rsplit("/", 1)[0]
+  var res = execCmd(fmt"python3 {folder}/python-deduckt/deduckt/main.py {command} > /dev/null")
   if res != 0:
     echo "python-deduckt problem"
     quit(1)

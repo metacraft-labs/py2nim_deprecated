@@ -154,24 +154,29 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   #     var f = function
   #     result.functions.add(replaceGeneric(f, genericMap))
 
-  var maybeGeneric = initTable[string, (Node, bool)]()
+  var maybeGeneric = initTable[string, (seq[Node], bool)]()
   for function in functions:
     if function[0].kind != PyStr:
       continue
 
     var label = function[0].s
     if not maybeGeneric.hasKey(label):
-      maybeGeneric[label] = (function, false)
+      maybeGeneric[label] = (@[function], false)
     else:
-      var other = maybeGeneric[label][0]
-      if len(function[1].children) == len(other[1].children) and function[2].testEq(other[2]):
-        maybeGeneric[label] = (function, true)
-        function.isGeneric = true
-        other.isGeneric = true
-      log fmt"generic? {label} {function.typ} @ {other.typ}: {function.isGeneric}"
+      for other in maybeGeneric[label][0]:
+        if len(function[1].children) == len(other[1].children) and function[2].testEq(other[2]):
+          maybeGeneric[label] = (@[function], true)
+          function.isGeneric = true
+          other.isGeneric = true
+        log fmt"generic? {label} {function.typ} @ {other.typ}: {function.isGeneric}"
+
+      if not function.isGeneric:
+        maybeGeneric[label][0].add(function)
+      
   for label, f2 in maybeGeneric:
-    var (function, isGeneric) = f2
+    var (functions, isGeneric) = f2
     if isGeneric:
+      var function = functions[0]
       function.typ = generalize(function.typ)
       result.functions.add(function)
 
@@ -446,6 +451,9 @@ proc compileBinOp(compiler: var Compiler, node: var Node, env: var Env): Node =
     (result, imports) = applyOperatorIdiom(result)
   else:
     (result, imports) = applyOperatorIdiom(result)
+  if result.isNil:
+    var typ = left.typ
+    result = binop(left, op, right, typ)
   for imp in imports:
     compiler.registerImport(imp)
 
@@ -493,6 +501,96 @@ proc replaceReturnYield(node: Node): Node =
       result[z] = replaceReturnYield(child)
       z += 1
 
+proc loadBranches(node: Node, nimElif: bool = false): seq[Node] =
+  case node.kind:
+  of Sequence:
+    if len(node.children) != 1:
+      result = @[]
+    else:
+      result = loadBranches(node[0])
+  of PyIf:
+    var ifBranch = if not nimElif: Node(kind: NimIf, children: @[node[0], node[1]]) else: Node(kind: NimElif, children: @[node[0], node[1]])
+    case node[2].kind:
+    of PyNone:
+      result = @[ifBranch]
+    of Sequence:
+      if len(node[2].children) == 1 and node[2][0].kind == PyIf:
+        result = @[ifBranch].concat(loadBranches(node[2][0], true))
+      else:
+        var elseBranch = Node(kind: NimElse, children: @[node[2][0]])
+        result = @[ifBranch, elseBranch]
+    of PyIf:
+      result = @[ifBranch].concat(loadBranches(node[2], true))
+    else:
+      var elseBranch = Node(kind: NimElse, children: @[node[2]])
+      result = @[ifBranch, elseBranch]
+  else:
+    result = @[]
+
+proc isDynamicTest(test: Node, args: HashSet[string]): bool =
+  result = test.kind == PyCall and test[0].kind == PyLabel and test[0].label in @["hasattr", "isinstance"] and len(test[1].children) > 1 and test[1][0].kind == PyLabel and test[1][0].label in args
+
+proc generateDynamic(compiler: var Compiler, test: Node): Type =
+  if test.kind == PyCall and test[0].kind == PyLabel:
+    var check = test[0].label
+    if check == "hasattr" and test[1][1].kind == PyStr:
+      result = Type(kind: N.Macro, label: "HasField", macroArgs: @[atomType(test[1][1].s)])
+      compiler.registerImport("py2nim_helpers")
+    elif check == "isinstance" and test[1][1].kind == PyLabel:
+      var label = test[1][1].label
+      if label == "list":
+        result = T.List
+      elif label == "dict":
+        result = T.Dict
+      else:
+        result = toType(PyType(kind: PyTypeAtom, label: label))
+    else:
+      result = NIM_ANY
+  else:
+    result = NIM_ANY
+
+proc generateBranch(compiler: var Compiler, branch: Node, node: Node, typ: Type): Node =
+  if branch.kind in {NimIf, NimElif}:
+    var label = branch[0][1][0].label
+    result = Node(kind: PyFunctionDef, children: @[deepCopy(node[0]), deepCopy(node[1]), deepCopy(branch[1])])
+    for z, arg in node[1][0].nitems:
+      if arg[0].s == label:
+        result.typ = deepCopy(typ)
+        if result.typ.kind == N.Overloads:
+          result.typ = result.typ.overloads[0]
+        result.typ.functionArgs[z] = compiler.generateDynamic(branch[0])
+        break
+  elif branch.kind == NimElse:
+    result = Node(kind: PyFunctionDef, typ: typ, children: @[deepCopy(node[0]), deepCopy(node[1]), deepCopy(branch[0])])
+  else:
+    warn $branch.kind
+    result = PY_NIL
+
+proc dynamicBranches(compiler: var Compiler, node: Node, typ: Type): (bool, seq[Node]) =
+  if node.kind != PyFunctionDef or typ.isNil or typ.kind notin {N.Function, N.Overloads}:
+    return (false, @[])
+
+  var branches: seq[Node] = @[]
+
+  var args = initSet[string]()
+  for arg in node[1][0]:
+    args.incl(arg[0].s)
+
+  var children = loadBranches(node[2])
+  for child in children:
+    if child.kind in {NimIf, NimElif} and
+       not child[0].isDynamicTest(args):
+      return (false, @[])
+
+  for child in children:
+    branches.add(compiler.generateBranch(child, node, typ))
+
+  result = (len(branches) > 0, branches)
+
+
+
+      
+
 proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, assignments: seq[Node] = @[], fTyp: Type = nil): Node =
   assert node.kind == PyFunctionDef
 
@@ -502,10 +600,21 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
 
   compiler.monitorCollisions(label)
 
+  # analyze typr
+  # ignore weird functions
+  # if we find an overloaded function, call this function for each overload
+  
   node.calls = initSet[string]()
   let typ = if fTyp.isNil: env.get(label) else: fTyp
   if typ.isNil or typ.kind notin {N.Overloads, N.Function}:
     return Node(kind: Sequence, children: @[])
+    
+  var (isDynamic, branches) = compiler.dynamicBranches(node, typ)
+  if isDynamic:
+    result = Node(kind: Sequence, children: @[])
+    for branch in branches.mitems:
+      result.children.add(compiler.compileFunctionDef(branch, env, fTyp=branch.typ))
+    return
   elif typ.kind == N.Overloads:
     result = Node(kind: Sequence, children: @[])
     let originalNode = node
@@ -514,6 +623,9 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
       var tempNode = deepCopy(originalNode)
       result.children.add(compiler.compileFunctionDef(tempNode, env, fTyp=overload))
     return
+
+  # analyze magic methods
+
   var isInit = false
   if label == "__init__":
     if len(assignments) == 0 and compiler.pureConstr(node):
@@ -581,6 +693,8 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     label = "()"
     node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
 
+  # analyze args
+  
   var args = initTable[string, Type]()
   var z = 0
   for v in node[1][0]:
@@ -594,12 +708,11 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   compiler.currentCalls = initSet[string]()
 
   var sequence = node[2]
-  assert sequence.kind == Sequence
+  if sequence.kind != Sequence:
+    sequence = Node(kind: Sequence, children: @[sequence])
 
-  z = 0
-  for child in sequence.children.mitems:
+  for z, child in sequence.nitems:
     sequence.children[z] = compiler.compileNode(child, functionEnv)
-    z += 1
 
   compiler.currentFunction = ""
   node.calls = compiler.currentCalls
@@ -1584,6 +1697,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyMod
           compiler.compileAst(path)
       except Exception:
         log getCurrentExceptionMsg()
+        # raise getCurrentException()
   if untilPass == Pass.Generation:
     var identifierCollisions = initSet[string]()
     for label, collision in compiler.identifierCollisions:

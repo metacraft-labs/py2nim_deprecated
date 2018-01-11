@@ -134,9 +134,13 @@ proc generateType(generator: var Generator, typ: Type): PNode =
       for arg in typ.args:
         result.add(generator.generateType(arg))
     of N.Generic:
-      result = nkBracket.newTree(generateIdent(typ.label))
+      result = nkBracketExpr.newTree(generateIdent(typ.label))
       for arg in typ.genericArgs:
         result.add(generateIdent(arg))
+    of N.Macro:
+      result = nkCall.newTree(generateIdent(typ.label))
+      for arg in typ.macroArgs:
+        result.add(generator.generateType(arg))
     else:
       result = generateIdent($typ.kind)
     if typ.isVar:
@@ -152,6 +156,28 @@ proc generateForward(generator: var Generator, function: Node): PNode =
   let args = generator.generateArgs(function[1], function.typ)
 
   var name = if function[0].kind == PyStr: generateIdent(function[0].s) else: emitNode(function[0])
+  name = nkPostfix.newTree(
+      generateIdent("*"),
+      name)
+  if function.typ.kind == N.Function:
+    var genericArgs: seq[string] = @[]
+    for arg in function.typ.functionArgs:
+      case arg.kind:
+      of N.Generic:
+        for label in arg.genericArgs:
+          if label notin genericArgs:
+            genericArgs.add(label)
+      of N.GenericVar:
+        if arg.label notin genericArgs:
+          genericArgs.add(arg.label)
+      else:
+        discard
+
+    if len(genericArgs) > 0:
+      name = nkBracketExpr.newTree(name)
+      for arg in genericArgs:
+        name.add(generateIdent(arg))
+
   if not function.isIterator:
     if function.isMethod:
       result = nkMethodDef.newTree()
@@ -159,9 +185,7 @@ proc generateForward(generator: var Generator, function: Node): PNode =
       result = nkProcDef.newTree()
   else:
     result = nkIteratorDef.newTree()
-  result.add(nkPostfix.newTree(
-      generateIdent("*"),
-      name))
+  result.add(name)
   result.add(emptyNode)
   result.add(emptyNode)
   result.add(args)

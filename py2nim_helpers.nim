@@ -23,3 +23,9 @@ macro with*(a: untyped, b: untyped): untyped =
     tmp.exit(e, e, t)
     if not e.isNil:
       raise e
+
+template hasField*(field: untyped): untyped =
+  type Accepted = concept a
+     a.`field`
+ 
+  Accepted

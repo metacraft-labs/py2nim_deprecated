@@ -1,10 +1,10 @@
 # those type nodes are closer to nim's type system
 # they are easily mappable to PNode
 
-import sequtils, strutils, strformat, tables, future, hashes, errors
+import sequtils, strutils, strformat, tables, future, hashes, errors, gen_kind
 
 type
-  N* {.pure.} = enum Atom, Function, Overloads, Compound, Generic, Record, Tuple, GenericVar, Any
+  N* {.pure.} = enum Atom, Function, Overloads, Compound, Generic, Record, Tuple, GenericVar, Macro, Any
 
   Type* = ref object
     label*:     string
@@ -42,6 +42,8 @@ type
     of N.GenericVar:
       # A generic
       discard
+    of N.Macro:
+      macroArgs*: seq[Type]
     of N.Any:
       # Universal
       discard
@@ -86,6 +88,8 @@ proc `==`*(t: Type, u: Type): bool =
     result = len(t.elements) == len(u.elements) and zip(t.elements, u.elements).allIt(it[0] == it[1])
   of N.GenericVar:
     result = t.label == u.label
+  of N.Macro:
+    result = false
   of N.Any:
     result = true
 
@@ -116,6 +120,8 @@ proc dump*(t: Type, depth: int): string =
         fmt"({elements})"
       of N.GenericVar:
         fmt"generic {t.label}"
+      of N.Macro:
+        fmt"macro {t.label}"
       of N.Any:
         fmt"any"
   result = "$1$2" % [offset, left]
@@ -144,6 +150,9 @@ iterator items*(t: Type): Type =
       yield element
   of N.GenericVar:
     discard
+  of N.Macro:
+    for arg in t.macroArgs:
+      yield arg
   of N.Any:
     discard
 
@@ -196,5 +205,42 @@ proc unify*(a: Type, b: Type, genericMap: var Table[string, Type]): bool =
       return len(a.elements) == len(b.elements) and zip(a.elements, b.elements).allIt(it[0].unify(it[1], genericMap))
     of N.GenericVar:
       return a.label == b.label
+    of N.Macro:
+      return false
     of N.Any:
       return true
+
+proc deepCopy*(a: Type): Type =
+  if a.isNil:
+    return a
+  result = genKind(Type, a.kind)
+  if not a.label.isNil:
+    result.label = $a.label
+  if not a.fullLabel.isNil:
+    result.fullLabel = $a.fullLabel
+  result.isVar = a.isVar
+  result.isRef = a.isRef
+  case a.kind:
+    of N.Function:
+      result.functionArgs = a.functionArgs.mapIt(deepCopy(it))
+      result.returnType = deepCopy(a.returnType)
+    of N.Overloads:
+      result.overloads = a.overloads.mapIt(deepCopy(it))
+    of N.Compound:
+      result.args = a.args.mapIt(deepCopy(it))
+      result.original = deepCopy(a.original)
+    of N.Generic:
+      result.genericArgs = a.genericArgs.mapIt($it)
+    of N.Record:
+      result.base = deepCopy(a.base)
+      result.inherited = a.inherited
+      result.init = if a.init.isNil: "" else: $a.init
+      result.members = initTable[string, Type]()
+      for label, typ in a.members:
+        result.members[label] = deepCopy(typ)
+    of N.Tuple:
+      result.elements = a.elements.mapIt(deepCopy(it))
+    of N.Macro:
+      result.macroArgs = a.macroArgs.mapIt(deepCopy(it))
+    else:
+      discard

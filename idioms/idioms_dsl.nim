@@ -437,11 +437,11 @@ proc applyOperatorIdiom*(node: var Node, maybe: bool = false): (Node, seq[string
 
   if idiom.isNil:
     imports = @[]
-    if not maybe:
-      raise newException(IdiomError, fmt"idiom for {op}({left.typ}, {right.typ})")
-    else:
-      result = (nil, imports)
-      return
+    # if not maybe:
+      # raise newException(IdiomError, fmt"idiom for {op}({left.typ}, {right.typ})")
+    # else:
+    result = (nil, imports)
+    return
 
   result = applyIdiom(node, idiom)
   result[1] = result[1].concat(imports)
@@ -483,6 +483,8 @@ proc replaceGeneric*(typ: Type, genericMap: Table[string, Type]): Type =
       return genericMap[typ.label]
     else:
       return typ
+  of N.Macro:
+    return typ
   of N.Any:
     return typ
 

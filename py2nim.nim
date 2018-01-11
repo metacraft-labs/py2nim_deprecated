@@ -52,7 +52,6 @@ proc save(compiler: Compiler, output: string, untilPass: Pass) =
         writeFile(fmt"{output}/{folder}/{filename}.nim", generated)
 
 proc translate =
-  var debug = false
   var command = ""
   var untilPass = Pass.Generation
   var output = "output"
@@ -101,11 +100,8 @@ proc translate =
     tracePython(command)
   var db = deduckt_db.load("python-deduckt.json")
 
-  # load ast
-  # var node = db.loadAst(path)
-
   # convert to idiomatic nim
-  var compiler = newCompiler(db, command, debug)
+  var compiler = newCompiler(db, command)
   compiler.compile(untilPass, onlyModule)
 
   save(compiler, output, untilPass)

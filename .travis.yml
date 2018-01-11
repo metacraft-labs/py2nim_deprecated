@@ -1,0 +1,31 @@
+matrix:
+
+  include:
+    language: c
+    compiler:
+      - gcc
+    before_install:
+      - git clone -b devel git://github.com/nim-lang/Nim.git --depth 1 nim
+      - cd nim
+      - git clone --depth 1 git://github.com/nim-lang/csources
+      - cd csources && sh build.sh
+      - cd ..
+      - bin/nim c koch
+      - ./koch boot -d:release
+      - export PATH=$PWD/bin:$PATH
+      - cd ..
+      - echo 'p:"nim/"' > nim.cfg
+    script:
+      - nim c py2nim.nim
+      - nim c tests/file_test.nim
+
+  include:
+    language: python
+    python: 3.5
+    before_install:
+      - cd python-deduckt
+      - pip install -r requirements.txt
+      - cd ..
+    script:
+      - ./tests/file_test
+

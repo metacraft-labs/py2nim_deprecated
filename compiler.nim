@@ -25,13 +25,20 @@ type
     currentCalls*: HashSet[string]
     base*: string
     depth*: int
-    debug*: bool
     identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision) 
                                                           # if there is already a different existing identifier 
                                                           # for that idiomatic one, toggle collision to true
 
-proc newCompiler*(db: DeducktDb, command: string, debug: bool): Compiler =
-  result = Compiler(db: db, command: command, debug: debug)
+template log(a: Textable) =
+  if debug:
+    echo $a
+
+template log(a: string) =
+  if debug:
+    echo a
+
+proc newCompiler*(db: DeducktDb, command: string): Compiler =
+  result = Compiler(db: db, command: command)
 
 proc moduleOf*(compiler: Compiler, name: string): string =
   let tokens = compiler.currentModule.split(".")
@@ -76,8 +83,13 @@ proc collapse(node: Node): seq[Node] =
   else:
     result = @[node]
 
+proc generalize(typ: Type): Type =
+  assert typ.kind == N.Function
+  
+  result = Type(kind: N.Function, functionArgs: typ.functionArgs.mapIt(atomType("auto")), returnType: atomType("auto"))
+
 proc genericCompatible(label: string, a: Type, b: Type): (bool, Table[string, Type]) =
-  echo "genericCompatible? ", label, " ", $a, " @ ", $b
+  log fmt"genericCompatible? {label} {$a} @ {$b}"
   var genericMap = initTable[string, Type]()
   if a.isNil or b.isNil:
     return (false, genericMap)
@@ -141,6 +153,27 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
   #   if isGeneric:
   #     var f = function
   #     result.functions.add(replaceGeneric(f, genericMap))
+
+  var maybeGeneric = initTable[string, (Node, bool)]()
+  for function in functions:
+    if function[0].kind != PyStr:
+      continue
+
+    var label = function[0].s
+    if not maybeGeneric.hasKey(label):
+      maybeGeneric[label] = (function, false)
+    else:
+      var other = maybeGeneric[label][0]
+      if len(function[1].children) == len(other[1].children) and function[2].testEq(other[2]):
+        maybeGeneric[label] = (function, true)
+        function.isGeneric = true
+        other.isGeneric = true
+      log fmt"generic? {label} {function.typ} @ {other.typ}: {function.isGeneric}"
+  for label, f2 in maybeGeneric:
+    var (function, isGeneric) = f2
+    if isGeneric:
+      function.typ = generalize(function.typ)
+      result.functions.add(function)
 
   for function in functions:
     if not function.isGeneric:
@@ -237,8 +270,13 @@ proc compileReversed(compiler: var Compiler, name: string, args: seq[Node], env:
 proc compileIsinstance(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   result = Node(kind: NimOf, children: args, typ: T.Bool)
 
-proc compileInt(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
-  result = call(Node(kind: PyLabel, label: name), args, T.Int)
+proc compileSpecialIntMethod(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  var arg = args[0]
+  result = attribute(arg, name, T.Int)
+
+proc compileSpecialFloatMethod(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
+  var arg = args[0]
+  result = attribute(arg, name, T.Float)
 
 proc compileBytes(compiler: var Compiler, name: string, args: seq[Node], env: var Env): Node =
   var arg: Node
@@ -276,7 +314,8 @@ var SPECIAL_FUNCTIONS* = {
   "len": compileLen,
   "reversed": compileReversed,
   "isinstance": compileIsinstance,
-  "int": compileInt,
+  "int": compileSpecialIntMethod,
+  "float": compileSpecialFloatMethod,
   "bytes": compileBytes,
   "enumerate": compileEnumerate,
   "min": compileAbs,
@@ -305,32 +344,38 @@ proc compileCall*(compiler: var Compiler, node: var Node, env: var Env): Node =
     compiler.registerImport(imp)
   if result.isNil: # no idiom
     result = node
-    if function.typ.kind == N.Function:
+    case function.typ.kind:
+    of N.Function:
       result.typ = function.typ.returnType
-    else:
-      if function.typ.kind == N.Any:
-        result.typ = function.typ
-      elif function.typ.kind == N.Record:
-        if function.kind != PyLabel or function.label != function.typ.label:
-          var call = fmt"{function.typ.fullLabel}#__call__"
-          if compiler.db.types.hasKey(call):
-            var typ = compiler.db.types[call]
-            if not typ.isNil and typ.kind == N.Function:
-              function.typ = typ
-              result.typ = typ.returnType
-              return
-          result.typ = NIM_ANY
-        else:
-          result.kind = PyConstr
-          result[2] = result[1]
-        var members: seq[Node] = @[]
-        for member, _ in function.typ.members:
-          members.add(label(member))
-        result[1] = Node(kind: Sequence, children: members)
-        result.typ = function.typ
+    of N.Any:
+      result.typ = function.typ
+    of N.Record:
+      if function.kind != PyLabel or function.label != function.typ.label:
+        var call = fmt"{function.typ.fullLabel}#__call__"
+        if compiler.db.types.hasKey(call):
+          var typ = compiler.db.types[call]
+          if not typ.isNil and typ.kind == N.Function:
+            function.typ = typ
+            result.typ = typ.returnType
+            return
+        result.typ = NIM_ANY
       else:
-        # echo fmt"wtf {function.typ}"
-        result.typ = function.typ
+        result.kind = PyConstr
+        result[2] = result[1]
+      var members: seq[Node] = @[]
+      for member, _ in function.typ.members:
+        members.add(label(member))
+      result[1] = Node(kind: Sequence, children: members)
+      result.typ = function.typ
+    of N.Overloads:
+      result.typ = NIM_ANY
+      for overload in function.typ.overloads:
+        if overload.kind == N.Function and args.children.zip(overload.functionArgs).allIt(it[0].typ == it[1]):
+          result.typ = overload.returnType
+          break
+    else:
+      warn fmt"wtf {function.typ}"
+      result.typ = function.typ
   if compiler.currentCalls.isValid() and function.kind == PyLabel:
     compiler.currentCalls.incl(function.label)
 
@@ -465,7 +510,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     result = Node(kind: Sequence, children: @[])
     let originalNode = node
     for overload in typ.overloads:
-      echo fmt"compile {overload}"
+      log fmt"compile {overload}"
       var tempNode = deepCopy(originalNode)
       result.children.add(compiler.compileFunctionDef(tempNode, env, fTyp=overload))
     return
@@ -1318,11 +1363,11 @@ proc compileUnaryOp(compiler: var Compiler, node: var Node, env: var Env): Node 
   result = typed(node, typ)
 
 proc compileIn(compiler: var Compiler, node: var Node, env: var Env): Node =
-  echo node
+  log node
 
 proc compileNode*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # TODO: write a macro
-  # echo fmt"{repeat(' ', compiler.depth)}compile {node.kind}"
+  log fmt"{repeat(' ', compiler.depth)}compile {node.kind}"
   try:
     if node.ready:
       result = node
@@ -1538,7 +1583,7 @@ proc compile*(compiler: var Compiler, untilPass: Pass = Pass.Generation, onlyMod
           compiler.asts[path] = compiler.mergeModuleTypeInfo(node, env)
           compiler.compileAst(path)
       except Exception:
-        echo getCurrentExceptionMsg()
+        log getCurrentExceptionMsg()
   if untilPass == Pass.Generation:
     var identifierCollisions = initSet[string]()
     for label, collision in compiler.identifierCollisions:

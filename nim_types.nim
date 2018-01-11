@@ -47,6 +47,10 @@ type
       discard
 
 let endl = "\n"
+
+proc atomType*(label: string): Type =
+  Type(kind: N.Atom, label: label)
+
 proc `$`*(t: Type): string
 
 proc hash*(t: Type): Hash =

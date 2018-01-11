@@ -4,6 +4,8 @@ type
   Textable* = concept a
     $a is string
 
+var debug* = false
+
 proc warn*(a: Textable) =
   styledWriteLine(stderr, fgYellow, fmt"warn: {$a}", resetStyle)
 

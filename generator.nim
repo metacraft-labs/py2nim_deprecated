@@ -18,10 +18,12 @@ type
 
 
 template log(a: Textable) =
-  styledWriteLine(stdout, fgBlue, $a, resetStyle)
+  if helpers.debug:
+    styledWriteLine(stdout, fgBlue, $a, resetStyle)
 
 template log(a: string) =
-  styledWriteLine(stdout, fgBlue, a, resetStyle)
+  if helpers.debug:
+    styledWriteLine(stdout, fgBlue, a, resetStyle)
 
 template emitNode(s: untyped): untyped =
   generator.generateNode(`s`)
@@ -513,8 +515,7 @@ proc generateContinue(generator: var Generator, node: Node): PNode =
 
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
-  # generator.log "generate"
-  # log fmt"generate {node.kind}"
+  log fmt"generate {node.kind}"
   if node.isNil:
     result = nilNode
     return
@@ -614,7 +615,7 @@ proc generateNode(generator: var Generator, node: Node): PNode =
   of PyContinue:
     result = generator.generateContinue(node)
   else:
-    echo "?", node.kind
+    log fmt"? {node.kind}"
     result = emptyNode
 
 proc generate*(generator: var Generator, module: Module): string =

@@ -88,6 +88,8 @@ builtin(T.String):
 
   lstrip(chars: T.Seq) =>                   receiver.strip(PY_TRUE, PY_FALSE, chars): T.String
 
+  split(s: T.String) =>                     split: T.List[T.String]
+
   dependenciesAll = @["strutils"]
 
   dependencies = {

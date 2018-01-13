@@ -95,7 +95,7 @@ proc markIdiomatic*(node: var Node) =
   for child in node.mitems:
     child.markIdiomatic()
 
-proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): (Node, seq[string]) =
+proc applyIdiom*(node: var Node, typ: Type, name: string, idiom: Idiom, children: seq[Node] = @[]): (Node, seq[string]) =
   var imports: seq[string] = @[]
   var newNode = case idiom.kind:
     of IType:
@@ -109,6 +109,14 @@ proc applyIdiom*(node: var Node, idiom: Idiom, children: seq[Node] = @[]): (Node
       idiom.handler(if len(children) > 0: children else: node.children)
   if node.kind == PyBinOp and node[1].kind == PyPow:
     imports.add("math")
+  if not typ.isNil:
+    var baseType = if typ.kind == N.Compound: typ.original else: typ
+    if requiredDependencies.hasKey(baseType):
+      var dependencies = requiredDependencies[baseType]
+      if name notin dependencies.ignore:
+        imports = imports.concat(dependencies.all)
+      if dependencies.methods.hasKey(name):
+        imports = imports.concat(dependencies.methods[name])
   result = (newNode, imports)
 
 proc initName(node: NimNode): (string, seq[Type]) =
@@ -443,7 +451,7 @@ proc applyOperatorIdiom*(node: var Node, maybe: bool = false): (Node, seq[string
     result = (nil, imports)
     return
 
-  result = applyIdiom(node, idiom)
+  result = applyIdiom(node, nil, "", idiom)
   result[1] = result[1].concat(imports)
 
 
@@ -519,8 +527,9 @@ proc loadMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[No
           idiom = methodIdiom.idiom
           break
         genericMap = initTable[string, Type]()
-        for z in 0..<len(receiver.typ.args):
-          genericMap[methodIdiom.genericArgs[z].label] = receiver.typ.args[z]
+        if receiver.typ.kind == N.Compound:
+          for z in 0..<len(receiver.typ.args):
+            genericMap[methodIdiom.genericArgs[z].label] = receiver.typ.args[z]
         var valid = true
         for z in 0..<len(args):
           if not methodIdiom.args[z].unify(args[z].typ, genericMap):
@@ -536,7 +545,7 @@ proc applyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[N
   if idiom.isNil:
     raise newException(IdiomError, fmt"idiom for {$receiver.typ}.{name}({$len(args)})")
 
-  var (n, imports) = applyIdiom(node, idiom, @[receiver].concat(args))
+  var (n, imports) = applyIdiom(node, receiver.typ, name, idiom, @[receiver].concat(args))
   result = (n.replaceGeneric(genericMap), imports)
 
 proc maybeApplyMethodIdiom*(node: var Node, receiver: Node, name: string, args: seq[Node]): (Node, seq[string]) =
@@ -544,5 +553,5 @@ proc maybeApplyMethodIdiom*(node: var Node, receiver: Node, name: string, args: 
   if idiom.isNil:
     result = (nil, @[])
   else:
-    var (n, imports) = applyIdiom(node, idiom, @[receiver].concat(args))
+    var (n, imports) = applyIdiom(node, receiver.typ, name, idiom, @[receiver].concat(args))
     result = (n.replaceGeneric(genericMap), imports)

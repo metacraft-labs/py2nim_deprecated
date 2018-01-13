@@ -57,6 +57,79 @@ but this capability will be available soon.
 The output is in an `output` directory by default.
 You can specify another one with `-o:`
 
+## Examples
+
+Some examples that demonstrate the potential of py2nim for recognizing
+Python patterns and applying idiomatic transformations.
+
+```python
+# Converting with dsl and list comprehensions
+
+with open('a', 'r') as f:
+    source = f.read()
+
+words = source.split(' ')
+print([len(word) for word in words])
+```
+
+```nim
+import
+  strutils, sequtils
+
+var
+  source = readFile("a")
+  words = source.split(" ")
+echo words.mapIt(len(it))
+```
+
+```python
+# recognizing the iterator pattern
+class A:
+
+    def __init__(self, values):
+        self.values = values
+        self.z = len(self.values)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.z -= 1
+        if self.z < 0:
+            raise StopIteration()
+        return self.values[self.z]
+
+
+a = A([2, 4])
+for z in a:
+    print(z)
+```
+
+```nim
+type
+  A* = object
+    values*: seq[int]
+    z*: int
+
+proc makeA*(values: seq[int]): A =
+  result.values = values
+  result.z = len(result.values)
+
+iterator items*(self: var A): int =
+  while true:
+    self.z -= 1
+    if self.z < 0:
+      break
+    yield self.values[self.z]
+
+var a = makeA(@[2, 4])
+for z in a:
+  echo z
+```
+
+You can find more examples in `tests/python` and `tests/nim`, eventually we'll upload a more complete
+side by side list.
+
 ## Limitations
 
 py2nim is in active development and many python constructs cannot be translated yet.

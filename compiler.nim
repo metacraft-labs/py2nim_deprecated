@@ -1,5 +1,5 @@
 import
-  strformat, os, strutils, sequtils, tables, json,
+  strformat, os, strutils, sequtils, tables,
   python_ast, python_types, nim_types, core, env, tracer, sets,
   ast_parser, ast_dsl, generator, module, deduckt_db, helpers,
   idioms/[idioms_dsl, operators, string_methods, list_methods]

@@ -1,4 +1,4 @@
-import os, strformat, strutils, sequtils, tables, json, macros, parseopt2, helpers, osproc
+import os, strformat, strutils, sequtils, tables, macros, parseopt2, helpers, osproc
 import tracer, python_ast, compiler, ast_parser, generator, deduckt_db
 
 proc writeHelp =

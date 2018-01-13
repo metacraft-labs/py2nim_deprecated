@@ -1,8 +1,9 @@
 # maybe we don't need it in the nim part anymore
 # but still useful: load the python ast
 
-import macros, strutils, sequtils, strformat, tables, helpers
+import macros, strutils, sequtils, tables, helpers
 import osproc, json, python_ast, python_types, gen_kind
+import strformat except `%`
 
 template log(a: string) =
   if debug:
@@ -20,7 +21,8 @@ proc importAst*(ast: JsonNode): Node =
       node = genKind(Node, z)
       break
   if node.isNil:
-    log fmt"add {kind} to python_ast.nim"
+    # log fmt"add {kind} to python_ast.nim"
+    log "add $1 to python_ast.nim" % kind
   case node.kind:
   of PyStr, PyBytes:
     node.s = ($ast{"s"})[1..^2]

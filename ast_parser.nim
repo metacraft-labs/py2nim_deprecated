@@ -21,8 +21,7 @@ proc importAst*(ast: JsonNode): Node =
       node = genKind(Node, z)
       break
   if node.isNil:
-    # log fmt"add {kind} to python_ast.nim"
-    log "add $1 to python_ast.nim" % kind
+    log fmt"add {kind} to python_ast.nim"
   case node.kind:
   of PyStr, PyBytes:
     node.s = ($ast{"s"})[1..^2]

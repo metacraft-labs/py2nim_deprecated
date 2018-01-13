@@ -61,20 +61,16 @@ proc importType*(typ: JsonNode): PyType =
 proc tracePython*(command: string) =
   # echo fmt"python3 python-deduckt/deduckt/main.py {command}"
   var folder = currentSourcePath.rsplit("/", 1)[0]
-  # var res = execCmd(fmt"python3 {folder}/python-deduckt/deduckt/main.py {command} > /dev/null")
-  var res = execCmd("python3 $1/python-deduckt/deduckt/main.py $2 > /dev/null" % [folder, command]) # TODO
+  var res = execCmd(fmt"python3 {folder}/python-deduckt/deduckt/main.py {command} > /dev/null")
   if res != 0:
     echo "python-deduckt problem"
     quit(1)
 
 proc traceTemp*(path: string, source: string): (Table[string, PyType], seq[string]) =
-  # let newSource = source.splitLines().mapIt(fmt"  {it}").join("\n")
-  let newSource = source.splitLines().mapIt("  $1" % it).join("\n")
+  let newSource = source.splitLines().mapIt(fmt"  {it}").join("\n")
   let endl = "\n"
-  # writeFile("temp.py", fmt"def test():{endl}{newSource}{endl}")
-  writeFile("temp.py", "def test():\n$1\n" % newSource)
-  # discard execProcess(fmt"python3 python-deduckt/deduckt/main.py {path}")
-  discard execProcess("python3 python-deduckt/deduckt/main.py $1" % path)
+  writeFile("temp.py", fmt"def test():{endl}{newSource}{endl}")
+  discard execProcess(fmt"python3 python-deduckt/deduckt/main.py {path}")
   let types = parseJson(readFile("types.json"))
   result[0] = initTable[string, PyType]()
   result[1] = @[]

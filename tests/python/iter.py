@@ -14,13 +14,13 @@ class A:
         return self.values[self.z]
 
 
-# def b(values):
-#     for z in reversed(values):
-#         yield z
+def b(values):
+    for z in reversed(values):
+        yield z
 
 a = A([2, 4])
 for z in a:
     print(z)
 
-# for z in b([2, 4]):
-#     print(z)
+for z in b([2, 4]):
+    print(z)

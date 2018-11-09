@@ -1102,7 +1102,7 @@ proc toBool(test: Node): Node =
   elif test.typ == T.String:
     result = compare(notEq(), test, pyString(""), T.Bool)
   else:
-    result = Node(kind: PyUnaryOp, children: @[operator("not"), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
+    result = Node(kind: PyUnaryOp, children: @[operator("not "), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
 
 proc compileWhile(compiler: var Compiler, node: var Node, env: var Env): Node =
   var test = compiler.compileNode(node[0], env)
@@ -1459,6 +1459,10 @@ proc compileSlice(compiler: var Compiler, node: var Node, env: var Env): Node =
   if finish == PY_NIL:
     a = ".."
     finish = Node(kind: NimPrefix, children: @[label("^"), pyInt(1)])
+  elif finish.kind == PyUnaryOp and finish.children[0].kind == PyUSub:
+    a = ".."
+    let limit = pyInt(finish.children[1].i+1)
+    finish = Node(kind: NimPrefix, children: @[label("^"), limit])
   elif finish.kind == PyInt and finish.i < 0:
     finish = Node(kind: NimPrefix, children: @[label("^"), finish])
 

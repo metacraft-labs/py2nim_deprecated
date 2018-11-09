@@ -107,7 +107,7 @@ proc dump*(t: Type, depth: int): string =
         let overloads = t.overloads.mapIt(dump(it, depth + 1)).join("\n")
         fmt"{t.fullLabel}:{endl}{overloads}"
       of N.Compound:
-        "$1[$2]" % [if t.original.label.isNil: "?" else: t.original.label, t.args.mapIt(dump(it, 0)).join(" ")]
+        "$1[$2]" % [if len(t.original.label) == 0: "?" else: t.original.label, t.args.mapIt(dump(it, 0)).join(" ")]
       of N.Generic:
         "$1[$2]" % [t.label, t.genericArgs.join(" ")]
       of N.Record:
@@ -214,10 +214,8 @@ proc deepCopy*(a: Type): Type =
   if a.isNil:
     return a
   result = genKind(Type, a.kind)
-  if not a.label.isNil:
-    result.label = $a.label
-  if not a.fullLabel.isNil:
-    result.fullLabel = $a.fullLabel
+  result.label = a.label
+  result.fullLabel = a.fullLabel
   result.isVar = a.isVar
   result.isRef = a.isRef
   case a.kind:
@@ -234,7 +232,7 @@ proc deepCopy*(a: Type): Type =
     of N.Record:
       result.base = deepCopy(a.base)
       result.inherited = a.inherited
-      result.init = if a.init.isNil: "" else: $a.init
+      result.init = a.init
       result.members = initTable[string, Type]()
       for label, typ in a.members:
         result.members[label] = deepCopy(typ)

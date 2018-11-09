@@ -1,5 +1,5 @@
 type
-  A* = object
+  A* = object of RootObj
 type
   B* = object of A
 var

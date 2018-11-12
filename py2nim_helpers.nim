@@ -27,23 +27,23 @@ template mapTable*[A, B](t: TableRef[A, B], op: untyped): untyped =
 template mapTable*[A](t: seq[A], op: untyped): untyped =
   mapTableSP(t, proc(it: A): auto = (let it{.inject.} = it; op))
 
-# macro with*(a: untyped, b: untyped): untyped =
-#   result = quote:
-#     var tmp = `a`
-#     var e: ref Exception
-#     var t = ""
-#     try:
-#       tmp.enter()
-#       `b`
-#     except:
-#       e = getCurrentException()
-#       t = getStackTrace()
-#     tmp.exit(e, e, t)
-#     if not e.isNil:
-#       raise e
+macro with*(a: untyped, b: untyped): untyped =
+  result = quote:
+    var tmp = `a`
+    var e: ref Exception
+    var t = ""
+    try:
+      tmp.enter()
+      `b`
+    except:
+      e = getCurrentException()
+      t = getStackTrace()
+    tmp.exit(e, e, t)
+    if not e.isNil:
+      raise e
 
-# template hasField*(field: untyped): untyped =
-#   type Accepted = concept a
-#     a.`field`
+template hasField*(field: untyped): untyped =
+  type Accepted = concept a
+     a.`field`
 
-#   Accepted
+  Accepted

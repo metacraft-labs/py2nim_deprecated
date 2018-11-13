@@ -538,6 +538,9 @@ proc generateCommentedOut(generator: var Generator, node: Node): PNode =
 proc generateContinue(generator: var Generator, node: Node): PNode =
   result = nkContinueStmt.newTree(emptyNode)
 
+proc homogeneous(node: Node): bool =
+  node.children.len == 0 or node.children.allIt(it.kind == node.children[0].kind)
+
 proc generateNode(generator: var Generator, node: Node): PNode =
   # TODO: macro
   log fmt"generate {node.kind}"
@@ -582,7 +585,10 @@ proc generateNode(generator: var Generator, node: Node): PNode =
   of PyExpr:
     result = generator.generateNode(node[0])
   of PyList:
-    result = generator.generateList(node)
+    if homogeneous(node):
+      result = generator.generateList(node)
+    else:
+      result = generator.generateTuple(node)
   of NimRangeLess:
     result = generator.generateRangeLess(node)
   of PyDict:
@@ -683,4 +689,3 @@ proc generate*(generator: var Generator, module: Module): string =
   if result.startsWith("  "):
   #   # XXX: sometimes, the rendered code is indented, try to fix this here
     result = result.splitLines().mapIt(if len(it) > 2: it[2..^1] else: it).join("\n")
-

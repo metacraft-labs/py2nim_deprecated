@@ -11,7 +11,7 @@ proc enter*(self: var A): void =
   self.a = 2
 
 proc exit*(self: var A; excType: ref Exception; excValue: ref Exception; traceback: string): void =
-  if notexcValue.isNil() and excValue of VMError:
+  if not excValue.isNil() and excValue of VMError:
     echo "ERROR"
   else:
     self.a = -2

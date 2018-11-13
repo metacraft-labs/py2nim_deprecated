@@ -126,7 +126,7 @@ proc toType*(node: Node): Type =
     assert false
 
 proc noRec(label: string, t: Type): bool =
-  if not t.isNil and not t.label.isNil and label == t.label:
+  if len(label) > 0 and label == t.label:
     return false
   return true
 

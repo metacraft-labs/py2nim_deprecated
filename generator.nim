@@ -1,7 +1,7 @@
 import
   strformat, strutils, sequtils, tables, sets,
   module, python_ast, helpers, core,
-  compiler/[ast, astalgo, idents, msgs, renderer],
+  compiler/[ast, astalgo, idents, msgs, renderer, lineinfos],
   nim_types, terminal, macros
 
 
@@ -34,6 +34,7 @@ template ensure(k: untyped): untyped =
 let endl = "\n"
 
 let nilNode = nkNilLit.newTree()
+let emptyNode = newNode(nkEmpty)
 
 macro generateIdent(s: untyped): untyped =
   result = quote:
@@ -448,7 +449,7 @@ proc generateDict(generator: var Generator, node: Node): PNode =
   var dict = nkTableConstr.newTree()
   for z in 0..<len(node[0].children):
     dict.add(nkExprColonExpr.newTree(emitNode(node[0][z]), emitNode(node[1][z])))
-  result = nkCall.newTree(nkDotExpr.newTree(dict, generateIdent("toTable")))
+  result = nkCall.newTree(nkDotExpr.newTree(dict, generateIdent("newTable")))
 
 proc generateWhile(generator: var Generator, node: Node): PNode =
   result = nkWhileStmt.newTree(emitNode(node[0]), emitNode(node[1]))
@@ -592,6 +593,8 @@ proc generateNode(generator: var Generator, node: Node): PNode =
     result = generator.generateUnaryOp(node)
   of NimExprColonExpr:
     result = generator.generateExprColonExpr(node)
+  of NimTuple:
+    result = generator.generateTuple(node)
   of PyTry:
     result = generator.generateTry(node)
   of PySubscript:

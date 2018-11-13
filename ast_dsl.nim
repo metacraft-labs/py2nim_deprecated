@@ -85,7 +85,7 @@ macro list*(args: varargs[untyped]): untyped =
 macro assign*(target: untyped, value: untyped, declaration: untyped = nil): untyped =
   var v = value
   v = v.expandLiteral()
-  var d = if declaration.isNil: nnkDotExpr.newTree(ident("Declaration"), ident("Existing")) else: declaration
+  var d = if declaration == nil: nnkDotExpr.newTree(ident("Declaration"), ident("Existing")) else: declaration
   result = quote:
     Node(
       kind: PyAssign,

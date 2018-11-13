@@ -16,7 +16,7 @@ type
     PySet, PySetComp, PySlice, PyStarred, PyStore, PyStr, PySub, PySubscript, PySuite,
     PyTry, PyTuple,
     PyUAdd, PyUSub, PyUnaryOp, PyWhile, PyWith, PyYield, PyYieldFrom, Py_NUM_TYPES, Pyalias, Pyarguments, Pyarg, Pykeyword, Pycomprehension, Pywithitem,
-    PyOperator, PyVarDef, PyChar, PyConstr, NimWhen, PyHugeInt, NimRange, NimRangeLess, NimCommentedOut, NimExprColonExpr, NimInfix, NimAccQuoted, NimOf, NimPrefix, NimIf, NimElif, NimElse
+    PyOperator, PyVarDef, PyChar, PyConstr, NimWhen, PyHugeInt, NimRange, NimRangeLess, NimCommentedOut, NimExprColonExpr, NimInfix, NimAccQuoted, NimOf, NimPrefix, NimIf, NimElif, NimElse, NimTuple
 
   Declaration* {.pure.} = enum Existing, Let, Var, Const
 
@@ -153,12 +153,12 @@ proc testEq*(a: Node, b: Node): bool =
       of PyHugeInt:
         result = a.h == b.h
       else:
-        if not a.children.isNil and not b.children.isNil:
+        if len(a.children) > 0 and len(b.children) > 0:
           if len(a.children) != len(b.children):
             return false
           result = zip(a.children, b.children).allIt(it[0].testEq(it[1]))
         else:
-          result = (a.children.isNil or len(a.children) == 0) and (b.children.isNil or len(b.children) == 0)
+          result = len(a.children) == 0 and len(b.children) == 0
 
 proc deepCopy*(a: Node): Node =
   if a.isNil:
@@ -211,4 +211,3 @@ proc translateIdentifier*(label: string, identifierCollisions: HashSet[string]):
     return translated
   else:
     return label
-

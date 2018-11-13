@@ -25,8 +25,8 @@ type
     currentCalls*: HashSet[string]
     base*: string
     depth*: int
-    identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision) 
-                                                          # if there is already a different existing identifier 
+    identifierCollisions*: Table[string, (string, bool)] # idiomaticIdentifier, (existingIdentifier, collision)
+                                                          # if there is already a different existing identifier
                                                           # for that idiomatic one, toggle collision to true
 
 template log(a: Textable) =
@@ -85,7 +85,7 @@ proc collapse(node: Node): seq[Node] =
 
 proc generalize(typ: Type): Type =
   assert typ.kind == N.Function
-  
+
   result = Type(kind: N.Function, functionArgs: typ.functionArgs.mapIt(atomType("auto")), returnType: atomType("auto"))
 
 proc genericCompatible(label: string, a: Type, b: Type): (bool, Table[string, Type]) =
@@ -172,7 +172,7 @@ proc compileModule*(compiler: var Compiler, file: string, node: Node): Module =
 
       if not function.isGeneric:
         maybeGeneric[label][0].add(function)
-      
+
   for label, f2 in maybeGeneric:
     var (functions, isGeneric) = f2
     if isGeneric:
@@ -231,7 +231,7 @@ proc compileAssign(compiler: var Compiler, node: var Node, env: var Env): Node =
     var label = node[0][0].label
     node[1] = value
     if not env.types.hasKey(label):
-      if compiler.path.endsWith("constants.py"): 
+      if compiler.path.endsWith("constants.py"):
         # weird?
         # most libraries I test have it
         # so use it for now, if we need, we can make add a flag
@@ -589,7 +589,7 @@ proc dynamicBranches(compiler: var Compiler, node: Node, typ: Type): (bool, seq[
 
 
 
-      
+
 
 proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, assignments: seq[Node] = @[], fTyp: Type = nil): Node =
   assert node.kind == PyFunctionDef
@@ -603,12 +603,12 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
   # analyze typr
   # ignore weird functions
   # if we find an overloaded function, call this function for each overload
-  
+
   node.calls = initSet[string]()
   let typ = if fTyp.isNil: env.get(label) else: fTyp
   if typ.isNil or typ.kind notin {N.Overloads, N.Function}:
     return Node(kind: Sequence, children: @[])
-    
+
   var (isDynamic, branches) = compiler.dynamicBranches(node, typ)
   if isDynamic:
     result = Node(kind: Sequence, children: @[])
@@ -694,7 +694,7 @@ proc compileFunctionDef(compiler: var Compiler, node: var Node, env: var Env, as
     node[0] = Node(kind: NimAccQuoted, children: @[Node(kind: PyLabel, label: label)])
 
   # analyze args
-  
+
   var args = initTable[string, Type]()
   var z = 0
   for v in node[1][0]:
@@ -931,7 +931,7 @@ proc compileClassDef(compiler: var Compiler, node: var Node, env: var Env): Node
 
 proc replaceFile(compiler: var Compiler, node: var Node, handler: string, filename: Node): Node =
   result = nil
-  if node.kind == PyCall and node[0].kind == PyAttribute and node[0][0].kind == PyLabel and 
+  if node.kind == PyCall and node[0].kind == PyAttribute and node[0][0].kind == PyLabel and
      node[0][0].label == handler:
     result = nil
     if node[0][1].s == "read" and len(node[1].children) == 0:
@@ -950,18 +950,18 @@ proc replaceFile(compiler: var Compiler, node: var Node, handler: string, filena
 
 proc compileWith(compiler: var Compiler, node: var Node, env: var Env): Node =
   # with open(filename, mode) as f:
-  #    code .. 
-  #    f.read() / f.write(source) 
+  #    code ..
+  #    f.read() / f.write(source)
   #   .. code
   #
-  # is translated to 
-  # 
-  # code .. 
+  # is translated to
+  #
+  # code ..
   # readFile() / writeFile(source)
-  # .. code 
+  # .. code
   # TODO: append etc
   # TODO: other common context
-  
+
   assert node.kind == PyWith
 
   assert node[0][0].kind == Pywithitem
@@ -989,7 +989,7 @@ proc compileWith(compiler: var Compiler, node: var Node, env: var Env): Node =
 proc compileFor*(compiler: var Compiler, node: var Node, env: var Env): Node =
   # for element in a:
   #   code
-  # 
+  #
   # doesn't change
   #
   # for z, element in enumerate(a):
@@ -1102,7 +1102,7 @@ proc toBool(test: Node): Node =
   elif test.typ == T.String:
     result = compare(notEq(), test, pyString(""), T.Bool)
   else:
-    result = Node(kind: PyUnaryOp, children: @[operator("not"), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
+    result = Node(kind: PyUnaryOp, children: @[operator("not "), call(attribute(test, "isNil"), @[], T.Bool)], typ: T.Bool)
 
 proc compileWhile(compiler: var Compiler, node: var Node, env: var Env): Node =
   var test = compiler.compileNode(node[0], env)
@@ -1176,10 +1176,10 @@ proc compileListComp(compiler: var Compiler, node: var Node, env: var Env): Node
   # becomes
   #
   # a.filterIt(test).mapIt(code) # element becomes it
-  
+
 
   assert node[1][0].kind == Pycomprehension and node[1][0][3].kind == PyInt and node[1][0][3].i == 0
-  
+
   let sequence = compiler.compileNode(node[1][0][1], env)
   if not sequence.typ.isList() and
      not sequence.typ.isDict() and
@@ -1220,7 +1220,7 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
   #
   # becomes
   #
-  # list.mapTable(k:v) # element becomes it 
+  # list.mapTable(k:v) # element becomes it
 
   var sequence: Node
   if node[2][0][1].kind == PyCall and node[2][0][1][0].kind == PyAttribute and
@@ -1228,7 +1228,7 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
     sequence = compiler.compileNode(node[2][0][1][0][0], env)
   else:
     sequence = compiler.compileNode(node[2][0][1], env)
-  if not sequence.typ.isDict() and 
+  if not sequence.typ.isDict() and
      not sequence.typ.isList() and
      sequence.typ != T.String and
      sequence.typ != T.Bytes:
@@ -1243,7 +1243,7 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
   var valueReplaced: Node
   var test: Node
   if len(node[2][0][2].children) > 0:
-    test = node[2][0][2]
+    test = node[2][0][2][0]
 
   if element.kind == PyLabel:
     types = {"it": elementOf(sequence.typ)}.toTable()
@@ -1266,11 +1266,14 @@ proc compileDictComp(compiler: var Compiler, node: var Node, env: var Env): Node
     base = sequence
   else:
     let testCode = compiler.compileNode(test, codeEnv)
-    base = call(attribute(sequence, "filterTable"), @[testCode])
+    let fn = if element.kind == PyLabel: "filterIt" else: "filterTable"
+    base = call(attribute(sequence, fn), @[testCode])
   let keyCode = compiler.compileNode(keyReplaced, codeEnv)
   let valueCode = compiler.compileNode(valueReplaced, codeEnv)
-
-  result = call(attribute(base, "mapTable"), @[Node(kind: NimExprColonExpr, children: @[keyCode, valueCode])], tableType(keyCode.typ, valueCode.typ))
+  let pairCode = @[Node(kind: NimTuple, children: @[keyCode, valueCode])]
+  result = call(attribute(base, "mapTable"), pairCode, tableType(keyCode.typ, valueCode.typ))
+  if element.kind == PyLabel:
+    compiler.registerImport("sequtils")
   compiler.registerImport("tables")
   compiler.registerImport("py2nim_helpers")
 
@@ -1333,7 +1336,7 @@ proc compileSubscript(compiler: var Compiler, node: var Node, env: var Env): Nod
     typ = T.Char
   elif node[0].typ == T.Bytes:
     typ = T.Int
-  elif not node[0].typ.fullLabel.isNil:
+  elif len(node[0].typ.fullLabel) > 0:
     var getitem = fmt"{node[0].typ.fullLabel}#__getitem__"
     if compiler.db.types.hasKey(getitem):
       typ = compiler.db.types[getitem]
@@ -1412,7 +1415,7 @@ proc compileBoolOp(compiler: var Compiler, node: var Node, env: var Env): Node =
     child = compiler.compileNode(child, env)
     node[1][z] = toBool(child)
     z += 1
-  
+
   let label = parseOp(node[0])
   result = node[1][0]
   for z in 1..<len(node[1].children):
@@ -1452,10 +1455,14 @@ proc compileSlice(compiler: var Compiler, node: var Node, env: var Env): Node =
     start = pyInt(0)
   elif start.kind == PyInt and start.i < 0:
     start = Node(kind: NimPrefix, children: @[label("^"), start])
-  
+
   if finish == PY_NIL:
     a = ".."
     finish = Node(kind: NimPrefix, children: @[label("^"), pyInt(1)])
+  elif finish.kind == PyUnaryOp and finish.children[0].kind == PyUSub:
+    a = ".."
+    let limit = pyInt(finish.children[1].i+1)
+    finish = Node(kind: NimPrefix, children: @[label("^"), limit])
   elif finish.kind == PyInt and finish.i < 0:
     finish = Node(kind: NimPrefix, children: @[label("^"), finish])
 

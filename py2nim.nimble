@@ -7,7 +7,7 @@ description   = "A Python-to-Nim transpiler"
 license       = "MIT"
 skipDirs      = @["tests"]
 
-requires "nim >= 0.17.0"
+requires "nim >= 0.19.0"
 
 proc configForTests() =
   --hints: off
@@ -17,5 +17,4 @@ proc configForTests() =
 
 task test, "run CPU tests":
   configForTests()
-  setCommand "c", "tests/all.nim"
-
+  setCommand "c", "tests/file_test.nim"
